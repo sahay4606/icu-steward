@@ -1,0 +1,21 @@
+{
+  "name": "icu-steward-workspace",
+  "private": true,
+  "version": "2.0.0",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "start": "yarn workspace icu-steward-saas start",
+    "android": "yarn workspace icu-steward-saas android",
+    "ios": "yarn workspace icu-steward-saas ios",
+    "web": "yarn workspace icu-steward-saas web",
+    "lint": "yarn workspace icu-steward-saas lint",
+    "dev": "concurrently -n api,frontend -c blue,green \"cd backend && yarn dev\" \"CI=1 yarn web\"",
+    "preinstall": "node ./frontend/scripts/cmd-guard.js"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

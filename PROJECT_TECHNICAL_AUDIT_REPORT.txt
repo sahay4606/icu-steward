@@ -1,0 +1,1557 @@
+================================================================================
+  PROJECT TECHNICAL AUDIT REPORT
+  ICU Steward 2.0 — SaaS Platform for ICU Operations & Antibiotic Stewardship
+================================================================================
+  Audit Date  : June 26, 2026
+  Repo Root   : /Users/rishabhsahay/icu-2.0
+  Auditor     : Principal Software Architect / Engineering Due Diligence
+================================================================================
+
+TABLE OF CONTENTS
+  1.  Executive Summary
+  2.  Project Overview
+  3.  Complete Architecture
+  4.  Technology Stack
+  5.  Folder Structure Analysis
+  6.  Feature Inventory
+  7.  Request/Data Flow Analysis
+  8.  Database Analysis
+  9.  API Analysis
+  10. Frontend Analysis
+  11. Backend Analysis
+  12. Security Audit
+  13. Performance Audit
+  14. Scalability Review
+  15. DevOps Review
+  16. Code Quality Review
+  17. Design Pattern Review
+  18. Engineering Maturity Scores
+  19. Industry Comparison
+  20. Risk Assessment
+  21. Technical Debt
+  22. Improvement Roadmap
+  23. Final Verdict
+  24. Overall Rating
+  25. Production Readiness Assessment
+
+================================================================================
+1. EXECUTIVE SUMMARY
+================================================================================
+
+ICU Steward 2.0 is a multi-tenant SaaS platform designed for ICU operations
+management with a focus on antibiotic stewardship, investigation tracking,
+patient management, and clinical workflow coordination. It is built as a Yarn
+v1 workspaces monorepo containing an Expo Router (React Native) frontend and
+an Express.js backend backed by Supabase (PostgreSQL).
+
+STRENGTHS:
+  - Clean domain separation and consistent repository pattern on backend
+  - Well-designed design system with centralized theme tokens
+  - Good database schema with proper indexes and foreign keys
+  - Multi-tenant architecture via hospital_id scoping
+  - Every interactive element has data-testid for testing
+  - ESM modules throughout (consistent module system)
+  - Seed data is realistic and comprehensive for demos
+
+CRITICAL WEAKNESSES:
+  - ZERO authentication on 50+ CRUD API endpoints (CRITICAL)
+  - Unsalted SHA-256 password hashing instead of bcrypt/argon2 (CRITICAL)
+  - Service Role Key exposed — full database admin bypassing RLS (CRITICAL)
+  - Mass assignment vulnerability — raw req.body passed to DB (CRITICAL)
+  - Open CORS with no origin restrictions
+  - Hardcoded JWT secret fallback in env.js
+  - Error messages leak internal details to clients
+  - Orphaned dead code (server.js) that references nonexistent files
+  - Services layer fully instantiated but entirely unused in request pipeline
+  - No CI/CD, no Docker, no tests, no monitoring, no logging infrastructure
+  - No pagination on any list endpoint
+  - Hardcoded ACTIVE_HOSPITAL_ID and ACTIVE_USER_ID in frontend config
+  - Full data refetch on every mutation (no optimistic updates, no caching)
+  - Notification-router expects columns that don't exist in schema
+  - Role config keys (admin/doctor) mismatch seed data roles (Hospital Admin/ICU Consultant)
+
+VERDICT: This codebase is at an early ALPHA / MVP prototype stage. It
+demonstrates good architectural intentions and scaffolding but has fundamental
+security, operational, and engineering gaps that make it NOT production-ready.
+It is suitable for demo/trial use only. Estimated effort to reach production
+readiness: 3-6 months with a dedicated team of 3-4 engineers.
+
+================================================================================
+2. PROJECT OVERVIEW
+================================================================================
+
+Name         : ICU Steward 2.0
+Type         : SaaS Multi-tenant ICU Operations Platform
+Domain       : Healthcare — ICU Antibiotic Stewardship, Investigation Tracking,
+               Patient Management, Clinical Tasks & Notifications
+Version      : 2.0.0
+Monorepo     : Yarn v1 workspaces (frontend/ + backend/)
+Language     : JavaScript only (zero TypeScript anywhere)
+License      : Not specified (private)
+
+TARGET USERS:
+  - ICU doctors and consultants
+  - ICU nurses
+  - Hospital pharmacists
+  - Hospital administrators
+  - Multi-tenant hospital organizations
+
+KEY FUNCTIONAL AREAS:
+  - Patient management with ICU-specific data (beds, ventilators, devices)
+  - Antibiotic stewardship with review schedules and escalation workflows
+  - Investigation/lab test tracking with reminder cadences
+  - Clinical task assignment and tracking
+  - In-app notification system with severity levels
+  - Daily ICU checklist (ventilator, DVT, nutrition, sedation, etc.)
+  - Patient timeline/audit trail
+  - Dashboard with aggregate metrics
+  - Multi-tenant isolation by hospital_id
+  - Role-based access control (designed but not enforced)
+
+================================================================================
+3. COMPLETE ARCHITECTURE
+================================================================================
+
+3.1 HIGH-LEVEL ARCHITECTURE DIAGRAM
+
+  [Mobile/Web Client — Expo Router]
+        |
+        | HTTPS (fetch API)
+        |
+  [Express.js API Server — port 4000]
+        |
+        | Supabase JS Client (service_role key)
+        |
+  [Supabase — PostgreSQL + Realtime]
+        |
+        |-- 14 Tables with indexes & RLS enabled (no policies)
+        |-- pgcrypto extension
+        |-- Seed data for 2 hospitals, 3 users, 3 patients
+
+3.2 LAYERED ARCHITECTURE (Backend)
+
+  index.js
+    └── app.js (Express App Factory)
+          ├── Middleware (CORS, JSON parser, Error handler)
+          ├── db/client.js (Supabase client — service_role)
+          ├── db/backend.js (creates repos + services)
+          │     ├── db/repository.js (generic CRUD factory)
+          │     ├── services/auth.js        [UNUSED]
+          │     ├── services/access-control.js [UNUSED]
+          │     ├── services/notification-router.js [UNUSED]
+          │     └── services/audit-log.js   [UNUSED]
+          ├── Custom routes (auth, dashboard, profile, settings)
+          │     └── Use raw supabase client directly
+          ├── CRUD routes (10 entities)
+          │     └── Via buildRepoRoutes middleware
+          └── error-handler.js (global)
+
+3.3 LAYERED ARCHITECTURE (Frontend)
+
+  app/_layout.js (RootLayout + AuthGate)
+    ├── AuthProvider
+    │     └── DataProvider
+    │           └── Stack Navigator
+    │                 ├── (tabs) — Tab Navigator (5 tabs)
+    │                 │     ├── index.js — Dashboard
+    │                 │     ├── patients.js — Patient List
+    │                 │     ├── tasks.js — Task List
+    │                 │     ├── notifications.js — Notification List
+    │                 │     └── profile.js — User Profile
+    │                 ├── patients/[id].js — Patient Detail
+    │                 ├── investigations/[id].js — Investigation Detail
+    │                 ├── antibiotics/[id].js — Antibiotic Detail
+    │                 ├── login.js — Login Screen
+    │                 ├── signup.js — Signup Screen
+    │                 ├── search.js — Global Search
+    │                 ├── new.js — Create Resource
+    │                 ├── settings.js — User Settings
+    │                 └── hospital-settings.js — Hospital Config
+
+3.4 DATA FLOW (Request Lifecycle)
+
+  User Action → Screen Component → useData() hook
+    → Context calls api.post/patch/delete
+    → API client (fetch) → HTTP → Express Route
+    → buildRepoRoutes → repository.insert/update/remove
+    → Supabase JS (service_role) → PostgreSQL
+    → Response → normalizeKeys (snake→camel)
+    → refetchAll() → re-fetches ALL entities
+    → Context state update → Re-render
+
+  Login Flow:
+    Login Screen → authService.login(email, password)
+      → POST /api/auth/login → SHA-256(password) → DB lookup
+      → JWT signed with secret → response {user, token}
+      → Token stored in memory Map (native) or localStorage (web)
+      → AuthContext state updated → AuthGate redirects to tabs
+
+================================================================================
+4. TECHNOLOGY STACK
+================================================================================
+
+CATEGORY          | TECHNOLOGY                              | VERSION
+------------------|-----------------------------------------|---------
+Frontend Framework| Expo (React Native)                     | ~54.0.0
+Routing           | Expo Router (file-based)                | ~6.0.0
+UI Components     | React Native + custom components        | 0.81.5
+Icons             | lucide-react-native                     | ^0.542.0
+SVG               | react-native-svg                        | 15.12.1
+Web Support       | react-native-web                        | ^0.21.0
+Secure Storage    | expo-secure-store                        | ~15.0.7
+------------------|-----------------------------------------|---------
+Backend Framework | Express.js                               | ^4.21.0
+Runtime           | Node.js (ESM — "type": "module")         | (any modern)
+Database Client   | @supabase/supabase-js                    | ^2.54.0
+Auth (server)     | jsonwebtoken (manual JWT)                | ^9.0.3
+Password Hashing  | crypto.createHash('sha256')              | (Node built-in)
+WebSocket         | ws (for Supabase Realtime transport)     | ^8.18.0
+Env Management    | dotenv                                   | ^16.4.0
+------------------|-----------------------------------------|---------
+Database          | Supabase (PostgreSQL 15+)                | Cloud
+ORM               | None (raw Supabase JS queries)
+Migrations        | Manual SQL files in supabase/migrations/
+RLS               | Enabled on all tables but NO policies defined
+------------------|-----------------------------------------|---------
+CI/CD             | NONE — No Docker, no GitHub Actions,
+                  | no CI pipeline of any kind
+Testing           | NONE — No test framework configured
+Monitoring        | NONE — No logging framework, no APM
+Deployment        | Manual node start — no containerization
+------------------|-----------------------------------------|---------
+AI Integration    | NONE
+Third-party APIs  | Supabase only
+Payments          | NONE
+Email/SMS         | NONE
+File Storage      | NONE
+
+================================================================================
+5. FOLDER STRUCTURE ANALYSIS
+================================================================================
+
+5.1 OVERALL STRUCTURE
+
+  icu-2.0/
+    ├── package.json           ← Root workspace definition
+    ├── AGENTS.md              ← AI agent guidelines
+    ├── frontend/              ← Expo Router app
+    │   ├── app/               ← File-based routes (Entry: expo-router/entry)
+    │   ├── src/               ← Source code
+    │   │   ├── components/    ← Reusable UI (checklist, timeline, ui/)
+    │   │   ├── contexts/      ← React contexts (Auth, Data)
+    │   │   ├── data/          ← Mock/fixture data
+    │   │   ├── hooks/         ← Custom hooks (use-icon-fonts)
+    │   │   ├── lib/           ← API client, config, formatters
+    │   │   ├── services/      ← Auth service
+    │   │   ├── utils/storage/ ← Platform storage shims
+    │   │   └── theme.js       ← Design tokens
+    │   ├── scripts/           ← Build/preinstall scripts
+    │   └── dist/              ← Web build output
+    └── backend/
+        ├── src/
+        │   ├── config/        ← env, tables, roles
+        │   ├── db/            ← client, repository, backend factory
+        │   ├── domain/        ← 14 domain repository factories
+        │   ├── middleware/    ← auth, error, async, build-repo-routes
+        │   ├── modules/       ← 15 route modules
+        │   └── services/      ← auth, access-control, audit, notification
+        ├── supabase/
+        │   ├── master.sql     ← Full schema + seed
+        │   ├── seed.sql       ← Seed data only
+        │   └── migrations/    ← 2 migration files
+        └── .env / .env.example
+
+5.2 ASSESSMENT: GOOD MODULAR STRUCTURE
+
+  POSITIVES:
+  - Clear separation of concerns across layers (config/db/domain/services/modules)
+  - Consistent file naming conventions (*.routes.js, *.js for domain)
+  - Logical grouping by domain entity
+  - Platform shim pattern for storage (native vs web) is well-implemented
+  - Design tokens centralized in theme.js
+
+  NEGATIVES:
+  - No .gitignore at root level (files like .env with live credentials committed)
+  - No tsconfig.json (acceptable since JS-only, but no JSDoc either)
+  - No metro.config.js (defaults used, acceptable)
+  - Orphaned server.js duplicates app.js functionality (dead code)
+  - Domain files are all identical one-liner wrappers (could be auto-generated)
+  - No barrel exports or index files in backend modules
+  - AGENTS.md, master.md, master2.md, final.txt, democredential.txt are
+    documentation artifacts mixed with source code
+  - eslint.config.js in frontend only — no lint config for backend
+
+================================================================================
+6. FEATURE INVENTORY
+================================================================================
+
+6.1 AUTHENTICATION
+  - Email/password login (frontend: app/login.js; backend: /api/auth/login)
+  - User signup (frontend: app/signup.js; backend: /api/auth/signup)
+  - JWT-based session with 7-day expiry
+  - Auth guard in root layout (AuthGate in app/_layout.js)
+  - Token validation on app startup via GET /api/auth/me
+  - File: frontend/src/services/auth.service.js
+  - File: backend/src/modules/auth/auth.routes.js
+
+6.2 PATIENT MANAGEMENT
+  - Patient list with search, filter, and sort
+  - Patient detail view with full clinical context
+  - Create new patient
+  - Risk score computation (frontend/src/data/mock.js)
+  - File: frontend/app/(tabs)/patients.js, frontend/app/patients/[id].js
+  - API: GET/POST/PATCH/DELETE /api/patients (ALL UNAUTHENTICATED)
+
+6.3 INVESTIGATION / LAB TRACKING
+  - Investigation list with status tracking (Pending/Received/Reviewed/Closed)
+  - Detail view with reminder cadence
+  - Create new investigation
+  - File: frontend/app/investigations/[id].js
+  - API: GET/POST/PATCH/DELETE /api/investigations (ALL UNAUTHENTICATED)
+
+6.4 ANTIBIOTIC STEWARDSHIP
+  - Antibiotic list with review dates, culture linking
+  - Detail view with dose/route/frequency, stewardship actions
+  - Action workflow: Continue/Escalate/De-escalate/Stop
+  - File: frontend/app/antibiotics/[id].js
+  - API: GET/POST/PATCH/DELETE /api/antibiotics (ALL UNAUTHENTICATED)
+
+6.5 DEVICE TRACKING
+  - Medical device management (central lines, ET tubes, foley, dialysis catheters)
+  - Review reminders based on insertion dates
+  - API: GET/POST/PATCH/DELETE /api/devices (ALL UNAUTHENTICATED)
+
+6.6 TASK MANAGEMENT
+  - Clinical task creation and assignment
+  - Status tracking (Pending/Completed)
+  - Priority levels
+  - File: frontend/app/(tabs)/tasks.js
+  - API: GET/POST/PATCH/DELETE /api/tasks (ALL UNAUTHENTICATED)
+
+6.7 NOTIFICATIONS
+  - In-app notification system with severity levels (critical/warning/info/safe)
+  - Acknowledgment workflow
+  - File: frontend/app/(tabs)/notifications.js
+  - API: GET/POST/PATCH/DELETE /api/notifications (ALL UNAUTHENTICATED)
+
+6.8 DASHBOARD
+  - Aggregate metrics (patients requiring attention, pending investigations, etc.)
+  - Quick action tiles for common tasks
+  - Recent signals and operational queue
+  - File: frontend/app/(tabs)/index.js
+  - API: GET /api/dashboard (UNAUTHENTICATED)
+
+6.9 DAILY ICU CHECKLIST
+  - 8-item daily checklist per patient (ventilator, nutrition, DVT, etc.)
+  - Check/uncheck tracking
+  - File: frontend/src/components/checklist.js
+  - Schema: daily_checklists table
+
+6.10 PATIENT TIMELINE
+  - Chronological event log per patient (admission, investigations, notes)
+  - GitHub-style vertical timeline UI
+  - File: frontend/src/components/timeline.js
+  - Schema: timeline_events table
+
+6.11 GLOBAL SEARCH
+  - Cross-entity search across patients, investigations, antibiotics, doctors
+  - Scope filter chips for narrowing results
+  - File: frontend/app/search.js
+
+6.12 MULTI-TENANCY
+  - All entities scoped by hospital_id
+  - Tenant filter on all list endpoints
+  - Hardcoded to 'hosp-st-john' in frontend config
+
+6.13 ROLE-BASED ACCESS CONTROL (DESIGNED BUT NOT ENFORCED)
+  - 6 roles defined in config/roles.js
+  - Permission strings defined (patients.read, all.write, etc.)
+  - Access control service created but never wired to routes
+
+6.14 AUDIT LOGGING (DESIGNED BUT NOT IMPLEMENTED)
+  - audit_logs table created
+  - Service created but never called
+  - Schema mismatch: service uses 'payload' key, schema expects 'details'
+
+================================================================================
+7. REQUEST/DATA FLOW ANALYSIS
+================================================================================
+
+7.1 FETCH ALL DATA ON APP START
+
+  DataContext useEffect:
+    1. Fires 9 parallel GET requests:
+       - getHospitalSettings(hosp-st-john)
+       - getPatients(hosp-st-john)
+       - getInvestigations(hosp-st-john)
+       - getAntibiotics(hosp-st-john)
+       - getDevices(hosp-st-john)
+       - getTasks(hosp-st-john)
+       - getNotifications(hosp-st-john)
+       - getUsers(hosp-st-john)
+       - getReminderRules(hosp-st-john)
+    2. Then GET /api/dashboard?hospital_id=hosp-st-john
+    3. Then GET /api/timeline-events?patient_id=<id> for first 3 patients
+       (sequentially, not parallel)
+    4. All responses normalized via normalizeKeys (snake→camelCase)
+    5. Results stored in DataContext state object
+
+  PERFORMANCE CONCERN: All data for all patients loaded at once on app
+  initialization, regardless of which tab is visited. No lazy loading.
+  Full timeline fetched for first 3 patients only (arbitrary limit).
+
+7.2 CREATE/UPDATE/DELETE FLOW
+
+  User action → Context method (e.g., createPatient)
+    → api.post('/api/patients', body with hospital_id)
+    → Backend repository.insert(payload)
+    → refetchAll() — re-fetches 6 entities in parallel
+    → Context state updated → Re-render
+
+  PERFORMANCE CONCERN: Every single mutation triggers a full data reload of
+  all entities. No optimistic updates. No granular cache invalidation.
+
+7.3 AUTH FLOW
+
+  App start:
+    AuthContext useEffect → storage.getItem('@icu_auth_user', '@icu_auth_token')
+    → GET /api/auth/me (validates token)
+    → If valid: sets user + token in state → AuthGate renders tabs
+    → If invalid: clears storage → AuthGate renders login
+
+  Login:
+    LoginScreen → authService.login(email, password)
+    → POST /api/auth/login
+    → Backend SHA-256 hashes password
+    → SELECT * FROM users WHERE email = ?
+    → Compares hash
+    → Returns user + JWT (7-day expiry)
+    → Token stored in memory Map (native) / localStorage (web)
+    → User stored as JSON string in same storage
+    → AuthGate redirects to /(tabs)
+
+  SECURITY CONCERN: Token stored in memory Map on native (lost on app restart
+  unless secureGet/secureSet used — which they are NOT). AuthContext uses
+  plain storage.getItem/setItem, not secureGet/secureSet.
+
+7.4 DASHBOARD DATA FLOW
+
+  GET /api/dashboard?hospital_id=xxx
+  Backend fires 5 parallel Supabase queries:
+    1. All patients → filter non-Stable → count
+    2. Pending investigations → count
+    3. Antibiotics with 'Review due' or 'High alert' → count
+    4. Unacknowledged notifications → count
+    5. Patients admitted in last 48 hours → count
+
+  Also returns hardcoded 0 for positiveCultures and deviceReviewDue.
+
+================================================================================
+8. DATABASE ANALYSIS
+================================================================================
+
+8.1 SCHEMA OVERVIEW (14 tables in backend/supabase/master.sql)
+
+  hospitals           (id: text PK)
+  users               (id: text PK, FK→hospitals)
+  patients            (id: text PK, FK→hospitals, 5 JSONB columns)
+  investigations      (id: text PK, FK→hospitals, FK→patients)
+  antibiotics         (id: text PK, FK→hospitals, FK→patients)
+  devices             (id: text PK, FK→hospitals, FK→patients)
+  tasks               (id: text PK, FK→hospitals, FK→patients nullable)
+  notifications       (id: text PK, FK→hospitals)
+  timeline_events     (id: text PK, FK→hospitals, FK→patients)
+  reminder_rules      (id: text PK, FK→hospitals)
+  daily_checklists    (id: text PK default gen_random_uuid, FK→hospitals, FK→patients)
+  audit_logs          (id: text PK default gen_random_uuid, FK→hospitals)
+  sessions            (id: text PK default gen_random_uuid, FK→users)
+  role_assignments    (id: text PK default gen_random_uuid, FK→hospitals, FK→users)
+
+8.2 SCHEMA STRENGTHS
+  - Proper foreign keys on all tables with REFERENCES constraints
+  - 28+ indexes covering hospital scoping, created_at, foreign keys, status
+  - All tables have created_at + updated_at timestamps
+  - Timestamptz used consistently (timezone-aware)
+  - pgcrypto extension for gen_random_uuid()
+  - RLS enabled on all tables (good foundation even without policies)
+  - patients JSONB columns allow flexible clinical data without schema changes
+  - Cascade-ready foreign key relationships
+
+8.3 SCHEMA WEAKNESSES
+
+  CRITICAL:
+  - notifications table MISSING columns expected by service layer:
+    - No source_user_id (notification-router.js line 12)
+    - No assigned_doctor_id (notification-router.js line 13)
+    - No patient_id (notification-router.js line 7)
+    - No channel (notification-router.js line 15)
+    - These inserts will silently drop extra keys or fail
+
+  - audit_logs service passes { action, payload } but schema expects:
+    - entity_type (NOT NULL, no default)
+    - entity_id (NOT NULL, no default)
+    - performed_by
+    - details (jsonb, not 'payload')
+    - The service will FAIL to insert every time
+
+  - patients table stores denormalized JSONB arrays:
+    - current_antibiotics, pending_investigations, completed_investigations,
+      devices, daily_checklist are JSONB copies of data in dedicated tables
+    - This creates dual-write risk — data in JSONB can diverge from
+      authoritative tables (investigations, antibiotics, devices, daily_checklists)
+    - No triggers or application logic to keep them in sync
+
+  HIGH:
+  - No CHECK constraints on status fields (e.g., status could be any string)
+  - No ENUM types for status, priority, severity, role — all free-text
+  - Text primary keys (e.g., 'p-101', 'u-admin') — human-readable but
+    no auto-generation for production (gen_random_uuid used only in 4 tables)
+  - Text PKs could cause fragmentation and slower joins vs UUIDs
+  - No ON DELETE CASCADE on foreign keys — deleting a hospital will fail
+    due to child record references
+  - No unique constraint on uhid (patient identifier that should be unique)
+
+  MEDIUM:
+  - Migration files are not numbered for sequential execution
+    (00001_create_tables.sql and master.sql overlap significantly)
+  - master.sql is essentially the full migration + seed in one file
+  - seed.sql doesn't include email/password_hash columns (added in migration 001)
+  - No migration runner/versioning — must be manually pasted into Supabase UI
+
+8.4 INDEX ANALYSIS
+
+  Adequate coverage. Every table has an index on hospital_id and on foreign
+  keys. Status, priority, date, and acknowledgment columns are indexed where
+  they're used in WHERE clauses. No missing indexes identified for current
+  query patterns.
+
+8.5 PERFORMANCE CONCERNS
+  - The patients JSONB columns could cause table bloat (each row stores
+    duplicated investigation/antibiotic/device data)
+  - No partial indexes on status/priority filters (but acceptable at this scale)
+  - Sequential timeline fetch for first 3 patients (frontend side inefficiency)
+
+================================================================================
+9. API ANALYSIS
+================================================================================
+
+9.1 ENDPOINT MAP
+
+  AUTH ENDPOINTS (backend/src/modules/auth/auth.routes.js):
+    POST   /api/auth/signup     — Register (no auth required)
+    POST   /api/auth/login      — Login (no auth required)
+    GET    /api/auth/me         — Current user (JWT REQUIRED)
+
+  DASHBOARD (backend/src/modules/dashboard/dashboard.routes.js):
+    GET    /api/dashboard       — Aggregate metrics (NO AUTH)
+
+  PROFILE (backend/src/modules/profile/profile.routes.js):
+    GET    /api/profile         — User + hospital data (NO AUTH)
+
+  HOSPITAL SETTINGS (backend/src/modules/hospital-settings/...):
+    GET    /api/hospital-settings — Hospital record (NO AUTH)
+
+  CRUD ENDPOINTS (10 entities × 5 methods = 50 endpoints, ALL NO AUTH):
+    GET    /api/<entity>        — List (with hospital_id filter)
+    GET    /api/<entity>/:id    — Get by ID
+    POST   /api/<entity>        — Create
+    PATCH  /api/<entity>/:id    — Update
+    DELETE /api/<entity>/:id    — Delete
+
+    Entities: patients, investigations, antibiotics, devices, tasks,
+              notifications, users, hospitals, timeline-events, reminder-rules,
+              daily-checklists
+
+  TOTAL: ~60 REST endpoints. Only 1 requires authentication (GET /api/auth/me).
+
+9.2 REST CONSISTENCY
+
+  POSITIVES:
+  - Consistent URL pattern: /api/<entity> and /api/<entity>/:id
+  - Standard HTTP methods: GET, POST, PATCH, DELETE
+  - Consistent response format (JSON)
+  - Appropriate status codes: 200 (success), 201 (created), 204 (delete),
+    400 (bad request), 401 (unauthorized), 409 (conflict), 500 (error)
+  - buildRepoRoutes ensures all CRUD endpoints follow identical patterns
+
+  NEGATIVES:
+  - PUT not supported anywhere (PATCH only for updates) — acceptable
+  - No pagination (limit/offset) on any list endpoint
+  - No filtering beyond simple field equality (no range, text search, etc.)
+  - No sorting control from client (fixed to created_at desc)
+  - No field selection (always SELECT *)
+  - Error responses leak internal server error messages verbatim
+  - No rate limiting headers
+  - No versioning in URL path (though acceptable at this stage)
+  - No OPTIONS/CORS preflight consideration
+
+9.3 REQUEST VALIDATION
+
+  - auth/signup validates presence of name, email, password, hospitalId
+  - auth/login validates presence of email, password
+  - dashboard validates hospital_id query param
+  - profile validates user_id query param
+  - CRUD endpoints: ZERO validation — req.body and req.query passed directly
+    to database
+
+9.4 API DOCUMENTATION
+
+  - No OpenAPI/Swagger documentation
+  - No Postman collection
+  - README in backend/ provides a domain map but not API reference
+
+================================================================================
+10. FRONTEND ANALYSIS
+================================================================================
+
+10.1 ARCHITECTURE & ROUTING
+
+  POSITIVES:
+  - Clean Expo Router v6 file-based routing
+  - Well-structured route hierarchy (tabs, detail screens, modals)
+  - Auth gate in root layout protects routes
+  - Consistent use of router.replace for auth redirects (no back button to login)
+  - Custom tab bar with active state styling
+  - Proper use of useLocalSearchParams for route parameters
+
+  NEGATIVES:
+  - Stack screens registered in _layout.js but some are not navigated to
+    (no deep linking seen for all registered routes)
+  - All data loads on app start regardless of which tab is active
+  - No lazy loading for tabs or detail screens
+
+10.2 STATE MANAGEMENT
+
+  POSITIVES:
+  - React Context pattern is appropriate for this scale
+  - AuthContext + DataContext separation is logical
+  - useMemo used to derive filtered/sorted lists
+  - useCallback for memoized functions
+  - Cancellation flag prevents state updates after unmount
+
+  NEGATIVES:
+  - DataContext re-renders ALL consumers on every data change
+    (value object created in useMemo but data reference changes every time)
+  - Full data refetch on every mutation is extremely inefficient
+  - No optimistic updates — user sees loading state on every action
+  - No error boundaries — a single failed API call can break the entire data load
+  - dashboardSummary in promise chain — if dashboard fails, all other data
+    is still loaded (good), but error is swallowed (catch → null)
+  - Timeline events fetched sequentially for first 3 patients only — partial data
+
+10.3 COMPONENT ARCHITECTURE
+
+  POSITIVES:
+  - Clean separation of atomic UI components (pill, surface, field, etc.)
+  - Consistent design system via theme.js
+  - Every interactive element has data-testid
+  - Surface component provides consistent card styling
+  - SectionHeader pattern for consistent section layout
+  - Timeline component with nice GitHub-style visualization
+  - Checklist component with 2-column grid
+
+  NEGATIVES:
+  - Inline component definitions in screen files (ResultCard, DashboardRow,
+    FormField, ActionPills, PatientCard, SeverityIcon, TabIcon, TabButton)
+    — these should be extracted to components/ for reusability
+  - No TypeScript props interfaces (though acceptable for JS project)
+  - No PropTypes validation
+  - No accessibility props beyond what React Native provides by default
+  - Button component from react-native used directly instead of wrapping
+    (no consistent button component)
+
+10.4 DESIGN SYSTEM (theme.js)
+
+  EXCELLENT. The design system is well-thought-out:
+  - 5 color categories (text, brand, status, chip, background/surface/border)
+  - 5 spacing levels (xs through xxl)
+  - 4 border radius levels
+  - 3 typography families with role-specific usage
+  - 2 shadow levels with cross-platform (iOS shadow + Android elevation)
+
+  However: Only 1 font variant per role (no weight/size variants defined in
+  theme; usage is inconsistent — some places use hardcoded 14px, 16px, etc.)
+
+10.5 API CLIENT (src/lib/api.js)
+
+  - Custom fetch-based client with Bearer token support
+  - Query string builder for params
+  - No request timeout (fetch has no timeout by default)
+  - delete method returns raw fetch response instead of parsed JSON
+    (inconsistent with post/patch)
+  - No retry logic, no interceptors, no request/response logging
+  - Error handling: throws generic "Request failed: {status}" — loses body
+
+10.6 NAVIGATION/SECURITY
+
+  - AuthGate in _layout.js preventively redirects to /login
+  - No client-side route protection per-role (all authenticated users see all tabs)
+  - Token read from storage on app start, validated via /api/auth/me
+  - No refresh token mechanism — expired tokens result in silent redirect to login
+
+================================================================================
+11. BACKEND ANALYSIS
+================================================================================
+
+11.1 ARCHITECTURE QUALITY
+
+  The backend has a well-intentioned layered architecture:
+  - config/ — environment, table names, role definitions
+  - db/ — database client, repository factory, backend wiring
+  - domain/ — per-entity repository factories
+  - middleware/ — reusable Express middleware
+  - modules/ — route definitions grouped by domain
+  - services/ — business logic services
+
+  However, the architecture is BROKEN BY DESIGN:
+  - Services are instantiated in createBackend() (backend.js) but NEVER used
+    in any route module. Routes either use raw supabase client (auth, dashboard,
+    profile, settings) or generic repositories (all CRUD routes).
+  - The services/auth.js wraps Supabase Auth methods, but auth.routes.js
+    handles JWT manually and does its own DB queries.
+  - The access-control service exists with `can()` and `requireTenantScope()`
+    but no route ever calls them.
+  - The notification-router service has detailed parameter structure, but
+    notifications are created directly via repository in route handlers.
+
+  This means: ~200 lines of service code is DEAD CODE that creates a false
+  sense of security/architecture.
+
+11.2 REPOSITORY PATTERN
+
+  The generic CRUD repository (db/repository.js) is clean and consistent:
+  - list, getById, insert, update, remove methods on every entity
+  - Tenant scoping built-in via hospital_id filter
+  - Dynamic query parameter filtering
+  - Ordered results
+
+  However:
+  - No pagination on list()
+  - No soft-delete support (remove does hard DELETE)
+  - insert/update accept raw payloads with zero validation
+  - No request-scoped transaction support
+  - list() accepts arbitrary filter keys from query params — could be abused
+    to filter on internal columns
+
+11.3 MIDDLEWARE
+
+  auth-middleware.js: Clean JWT verification. Only used on 1 route.
+  async-handler.js: Standard Express async error wrapper. Good.
+  error-handler.js: Returns err.message verbatim. Information leak.
+  build-repo-routes.js: Clean CRUD route builder. No auth integration.
+
+11.4 DOMAIN FILES
+
+  All 14 domain files are one-liner wrappers:
+    export function createXxxRepository(client) {
+      return createRepository(client, BACKEND_TABLES.xxx, { ...options });
+    }
+
+  This is boilerplate that could be auto-generated from a config array.
+  No custom business logic, computed fields, or validation in any domain file.
+
+11.5 ORPHANED DEAD CODE
+
+  backend/src/server.js (155 lines):
+  - Imports from ./lib/supabase.js and ./lib/backend.js — FILES THAT DON'T EXIST
+  - Contains inline auth logic with x-user-id header (old pattern)
+  - Contains duplicate route building logic
+  - Would crash immediately if imported or executed
+  - This file should be DELETED
+
+================================================================================
+12. SECURITY AUDIT
+================================================================================
+
+12.1 CRITICAL — NO AUTHENTICATION ON CRUD ENDPOINTS
+
+  Severity: CRITICAL (10/10)
+  Files: backend/src/modules/*/ (all 10 CRUD route modules)
+  Evidence:
+    - buildRepoRoutes (middleware/build-repo-routes.js) creates GET/POST/PATCH/DELETE
+      routes with zero auth checks
+    - app.js mounts these routes without any auth middleware wrapper
+    - auth-middleware.js exists but is ONLY applied to GET /api/auth/me
+    - This means ANYONE can read/write/delete ALL patient data, user accounts,
+      settings, etc. without any authentication
+  Impact: Complete data breach. Anyone who knows the API URL can access all
+    hospital data, modify patient records, delete data, create users, etc.
+
+12.2 CRITICAL — UNSALTED SHA-256 PASSWORD HASHING
+
+  Severity: CRITICAL (10/10)
+  File: backend/src/modules/auth/auth.routes.js, line 33, 47
+  Evidence:
+    - const hash = crypto.createHash('sha256').update(password).digest('hex');
+    - No salt, no iterations, no bcrypt/scrypt/argon2
+    - SHA-256 is a fast hash not designed for passwords
+    - Seed data hashes can be cracked instantly (admin123, consult123, resident123)
+    - Rainbow tables would reverse most common passwords immediately
+  Impact: Complete compromise of all user passwords if database is breached.
+    Attackers can authenticate as any user.
+
+12.3 CRITICAL — SERVICE ROLE KEY EXPOSURE
+
+  Severity: CRITICAL (9/10)
+  File: backend/src/db/client.js, line 7
+  Evidence:
+    - Uses SUPABASE_SERVICE_ROLE_KEY (not anon key)
+    - Service role bypasses ALL Row Level Security policies
+    - .env file containing actual keys is committed to repository
+  Impact: Anyone with access to the .env file (committed in git) has full
+    admin access to the Supabase database. RLS is effectively useless.
+
+12.4 CRITICAL — MASS ASSIGNMENT VULNERABILITY
+
+  Severity: CRITICAL (9/10)
+  File: backend/src/middleware/build-repo-routes.js, lines 14-16, 19-21
+  Evidence:
+    - router.post('/', asyncHandler(async (req, res) => {
+        const data = await repo.insert(req.body); ...
+    - router.patch('/:id', asyncHandler(async (req, res) => {
+        const data = await repo.update(req.params.id, req.body); ...
+  Impact: Any user (authenticated or not) can set any column on any entity.
+    For users table: can set role='admin', password_hash, status, etc.
+    For patients: can set hospital_id to access other tenants' data.
+
+12.5 HIGH — NO INPUT VALIDATION
+
+  Severity: HIGH (8/10)
+  File: backend/src/middleware/build-repo-routes.js (entire file)
+  Evidence:
+    - req.body passed directly to database operations
+    - No schema validation, no type checking, no sanitization
+    - req.query used directly as filters — could enumerate columns
+  Impact: Malformed or malicious payloads reach the database. Could
+    potentially exploit PostgreSQL or Supabase vulnerabilities.
+
+12.6 HIGH — OPEN CORS
+
+  Severity: HIGH (7/10)
+  File: backend/src/app.js, line 24
+  Evidence:
+    - app.use(cors()) — no origin whitelist, allows all origins
+  Impact: Any website can make authenticated API calls from a browser if
+    user is logged in. Enables CSRF-style attacks.
+
+12.7 HIGH — ERROR INFORMATION LEAKAGE
+
+  Severity: HIGH (7/10)
+  File: backend/src/middleware/error-handler.js, line 3
+  Evidence:
+    - res.status(500).json({ error: err.message });
+    - err.message can contain SQL errors, stack traces, internal paths
+  Impact: Attackers can probe endpoints and learn internal system details
+    from error messages.
+
+12.8 HIGH — HARDCODED JWT SECRET FALLBACK
+
+  Severity: HIGH (8/10)
+  File: backend/src/config/env.js, line 14
+  Evidence:
+    - jwtSecret: env[BACKEND_ENV_KEYS.jwtSecret] || 'icu-steward-dev-secret'
+  Impact: If JWT_SECRET is missing from environment, falls back to a known
+    string. Anyone who reads this code can forge valid JWT tokens.
+
+12.9 HIGH — NO RATE LIMITING
+
+  Severity: HIGH (7/10)
+  File: Entire backend — no rate limiting middleware anywhere
+  Impact: Login endpoint vulnerable to brute force. All endpoints vulnerable
+    to DoS. API abuse possible without throttling.
+
+12.10 HIGH — JWT SECRET READ AT MIDDLEWARE CREATION TIME
+
+  Severity: HIGH (6/10)
+  File: backend/src/middleware/auth-middleware.js, line 5
+  Evidence:
+    - jwtSecret read once during factory call, not per-request
+    - If env changes, old tokens still validate with old secret
+  Impact: No way to rotate JWT secret without restarting server.
+
+12.11 HIGH — NO REQUEST SIZE LIMITS
+
+  Severity: HIGH (6/10)
+  File: backend/src/app.js, line 25
+  Evidence:
+    - app.use(express.json()); — no limit parameter
+  Impact: Large payload attacks can exhaust server memory.
+
+12.12 HIGH — LIVE CREDENTIALS IN .env COMMITTED
+
+  Severity: HIGH (9/10)
+  File: backend/.env (live Supabase credentials committed to repository)
+  Impact: All credentials (SUPABASE_URL, ANON_KEY, SERVICE_ROLE_KEY, JWT_SECRET)
+    are in the git history. Anyone with repo access has full database access.
+
+12.13 MEDIUM — AUTH TOKENS NOT IN SECURE STORE (NATIVE)
+
+  Severity: MEDIUM (5/10)
+  File: frontend/src/contexts/AuthContext.js, lines 18-19
+  Evidence:
+    - Uses storage.getItem/setItem (in-memory Map on native)
+    - secureGet/secureSet exist in storage adapter but are NOT used
+  Impact: Auth tokens persist only in memory on native (lost on app restart)
+    or in localStorage on web (no encryption).
+
+12.14 MEDIUM — SIGNUP HARDCODES ROLE
+
+  Severity: MEDIUM (5/10)
+  File: backend/src/modules/auth/auth.routes.js, line 36
+  Evidence:
+    - Role hardcoded to 'Senior Resident' on signup
+  Impact: All new users get the same role regardless of their actual position.
+
+12.15 MEDIUM — ROLE/SEED DATA MISMATCH
+
+  Severity: MEDIUM (5/10)
+  File: backend/src/config/roles.js vs master.sql
+  Evidence:
+    - Config keys: admin, doctor, nurse, pharmacist, consultant, resident
+    - Seed data roles: 'Hospital Admin', 'ICU Consultant', 'Senior Resident'
+    - No mapping between these sets
+  Impact: RBAC cannot match database roles to permission definitions.
+
+12.16 MEDIUM — NOTIFICATION SCHEMA MISMATCH
+
+  Severity: MEDIUM (5/10)
+  File: backend/src/services/notification-router.js lines 5-15 vs master.sql
+  Evidence:
+    - Service expects: patient_id, source_user_id, assigned_doctor_id, channel
+    - Schema has: id, hospital_id, title, detail, severity, time, acknowledged
+    - Service inserts will silently ignore extra keys
+  Impact: Notifications created via the service will lose critical metadata.
+
+12.17 MEDIUM — AUDIT LOG SCHEMA MISMATCH
+
+  Severity: MEDIUM (5/10)
+  File: backend/src/services/audit-log.js lines 4-8 vs master.sql
+  Evidence:
+    - Service passes { action, payload }
+    - Schema requires: action, entity_type, entity_id, performed_by, details
+    - Missing: entity_type (NOT NULL), entity_id (NOT NULL), performed_by
+    - Key name mismatch: payload vs details
+  Impact: The auditLog.record() function will FAIL on insert every time.
+
+12.18 LOW — NO CSRF PROTECTION
+
+  Severity: LOW (3/10)
+  Evidence: No CSRF tokens, no SameSite cookie config, no anti-CSRF headers
+  Mitigation: API is stateless (Bearer token), which mitigates CSRF somewhat.
+
+================================================================================
+13. PERFORMANCE AUDIT
+================================================================================
+
+13.1 DATABASE QUERIES
+
+  - No N+1 issues identified — all queries are simple table access
+  - Dashboard fires 5 parallel queries — efficient
+  - All queries are indexed appropriately
+  - However: SELECT * on every query returns all columns, including JSONB blobs
+
+13.2 FRONTEND PERFORMANCE
+
+  CRITICAL ISSUES:
+  - Full data refetch on every mutation (createEntity, updateEntity, removeEntity
+    all call refetchAll which re-fetches 6 entities)
+  - All data loaded on app start regardless of which tab is active
+  - No pagination — if a hospital has 10,000 patients, all are loaded at once
+  - Timeline events sequentially fetched for only first 3 patients (arbitrary)
+
+  MEDIUM ISSUES:
+  - DataContext value object recreated on every render (despite useMemo, the
+    data object reference changes on every setData call, causing all consumers
+    to re-render)
+  - No React.memo on any component
+  - No useMemo for filtered lists in some screens
+  - API client creates new headers object on every request
+
+13.3 BUNDLE SIZE
+
+  - No bundle analysis tooling configured
+  - All lucide-react-native icons are imported individually (good tree-shaking)
+  - No dynamic imports or code splitting
+  - Web bundle is a single monolithic JS file (entry-*.js at 1.4MB+)
+  - No image or asset optimization
+
+13.4 CACHING
+
+  - No caching layer whatsoever (no Redis, no in-memory cache, no HTTP caching)
+  - Every API request hits the database
+  - Frontend does not cache API responses between sessions
+  - DataContext.load triggers on every mount (including tab switches)
+
+================================================================================
+14. SCALABILITY REVIEW
+================================================================================
+
+14.1 DATABASE SCALING
+
+  - Supabase PostgreSQL can scale vertically and with read replicas
+  - Current schema has no partitioning strategy
+  - Text primary keys are less efficient for large-scale joins than UUIDs
+  - JSONB columns on patients table cause table bloat and slow queries
+  - No materialized views or query optimization for dashboard aggregates
+
+14.2 API SCALING
+
+  - Express.js single-threaded — needs clustering or PM2 for multi-core
+  - No rate limiting — single user could saturate the API
+  - No caching — every request hits the database
+  - No compression (gzip) on responses
+  - Synchronous request handling per connection (no queue/worker pattern)
+
+14.3 FRONTEND SCALING
+
+  - All data loaded on mount — not viable beyond ~1000 patients
+  - No virtualized lists (FlatList instead of SectionList/VirtualizedList)
+  - No paginated data loading
+  - Everything in a single bundle with no code splitting
+
+14.4 MULTI-TENANT SCALING
+
+  - hospital_id scoping is correct for tenant isolation
+  - However: no connection pooling per tenant, no tenant-aware caching
+  - All tenants share the same database (fine for most SaaS, but no isolation
+    guarantees)
+
+================================================================================
+15. DEVOPS REVIEW
+================================================================================
+
+15.1 CI/CD
+
+  STATUS: NONE. No CI/CD pipeline of any kind.
+  - No GitHub Actions, GitLab CI, CircleCI, or similar
+  - No automated testing on commits
+  - No linting on commits
+  - No build verification
+  - No deployment automation
+
+15.2 CONTAINERIZATION
+
+  STATUS: NONE. No Docker configuration.
+  - No Dockerfile
+  - No docker-compose.yml
+  - No .dockerignore
+  - Deployment is manual: "node src/index.js"
+
+15.3 ENVIRONMENT MANAGEMENT
+
+  - dotenv for .env loading (loaded in db/client.js via side-effect import)
+  - Backend: 5 environment variables defined in .env.example
+  - Frontend: 1 env var (EXPO_PUBLIC_API_URL) — not in .env file
+  - No .env.production / .env.staging distinction
+  - No environment validation on startup (missing vars silently default)
+
+15.4 MONITORING & LOGGING
+
+  STATUS: NONE.
+  - No structured logging (console.log/console.error only)
+  - No log levels (debug/info/warn/error)
+  - No APM (Datadog, New Relic, Sentry)
+  - No health check endpoints
+  - No metrics collection
+  - No error tracking
+  - No uptime monitoring
+
+15.5 DEPLOYMENT
+
+  - Backend: Manual node src/index.js (or yarn start)
+  - Frontend: expo build or expo start for dev
+  - No process manager (no PM2, no systemd)
+  - No graceful shutdown handling
+  - No zero-downtime deployment
+  - No rollback strategy
+
+15.6 BACKUPS
+
+  STATUS: NONE (relies on Supabase platform backups).
+
+================================================================================
+16. CODE QUALITY REVIEW
+================================================================================
+
+16.1 PROJECT STRUCTURE — 7/10
+  Good modular separation. Dead code (server.js) and doc artifacts mixed with
+  source lower the score.
+
+16.2 NAMING CONVENTIONS — 8/10
+  Consistent: camelCase for JS, snake_case for SQL, PascalCase for components.
+  Lowercase-kebab for route files. Some inconsistency: patientId vs patient_id
+  cross-boundary (handled by normalizeKeys).
+
+16.3 MODULARITY — 7/10
+  Good layering in backend. Domain files are too thin (boilerplate). Services
+  exist but are disconnected. Frontend has inline components in screens.
+
+16.4 DRY (Don't Repeat Yourself) — 6/10
+  - 14 identical domain file patterns (could be auto-generated)
+  - Inline component definitions repeated across screen files
+  - buildRepoRoutes reduces CRUD route duplication — GOOD
+  - DashboardRow, ResultCard, FormField, PatientCard patterns duplicated
+
+16.5 SOLID PRINCIPLES
+  - Single Responsibility: Mostly good. Each file has one purpose.
+  - Open/Closed: Repository pattern allows extension without modification. GOOD.
+  - Liskov Substitution: All repositories implement same interface. GOOD.
+  - Interface Segregation: Repository interface is minimal (5 methods). GOOD.
+  - Dependency Inversion: createRepository accepts client abstraction. GOOD.
+    However: Route modules depend directly on concrete repositories,
+    not interfaces.
+
+16.6 CODE COMPLEXITY
+  - No excessive cyclomatic complexity found
+  - Largest file: master.sql (387 lines — reasonable for schema + seed)
+  - Largest component: app/(tabs)/index.js (dashboard) — could be broken down
+  - DataContext.js is the most complex at 158 lines with multiple concerns
+
+16.7 ERROR HANDLING
+  - Backend: asyncHandler catches rejected promises, error handler returns
+    err.message verbatim. No typed errors, no status code differentiation.
+  - Frontend: Basic try/catch in contexts. Error displayed via Alert or
+    error state. No error boundaries.
+
+16.8 DEAD CODE
+  1. backend/src/server.js — orphaned, references nonexistent imports (HIGH)
+  2. backend/src/services/auth.js — instantiated but never used (MEDIUM)
+  3. backend/src/services/access-control.js — instantiated but never used (MEDIUM)
+  4. backend/src/services/notification-router.js — instantiated but never used (MEDIUM)
+  5. backend/src/services/audit-log.js — instantiated but never used (MEDIUM)
+  6. backend/src/config/roles.js BACKEND_ROLES constant — exported but unused (LOW)
+  7. frontend/src/hooks/use-icon-fonts.js — stub returning hardcoded values (LOW)
+  8. frontend/src/data/mock.js filters export — only used partially (LOW)
+
+================================================================================
+17. DESIGN PATTERN REVIEW
+================================================================================
+
+17.1 FACTORY PATTERN
+  - Used extensively: createApp(), createSupabaseClient(), createBackend(),
+    createRepository(), createAuthRoutes(), createPatientsRoutes(), etc.
+  - Clean separation of creation from usage
+  - Allows for dependency injection and testing
+  - RATING: EXCELLENT
+
+17.2 REPOSITORY PATTERN
+  - Generic CRUD repository with tenant scoping
+  - Consistent interface across all entities
+  - RATING: GOOD (needs pagination, validation, soft-delete)
+
+17.3 CONTEXT/PROVIDER PATTERN (React)
+  - AuthContext + DataContext for global state
+  - Clean separation of auth state from data state
+  - RATING: GOOD (but no optimizations for render performance)
+
+17.4 MIDDLEWARE PATTERN (Express)
+  - Auth middleware, error handler, async handler
+  - Route builder middleware for CRUD
+  - RATING: GOOD (auth middleware needs broader application)
+
+17.5 PLATFORM SHIM PATTERN
+  - Native vs web storage implementations
+  - Clean conditional loading based on Platform.OS
+  - RATING: EXCELLENT
+
+17.6 MODULE PATTERN (ESM)
+  - Consistent ESM imports/exports throughout
+  - No mixed module systems
+  - RATING: EXCELLENT
+
+17.7 MISSING PATTERNS
+  - No strategy pattern for business logic variants
+  - No observer/event emitter pattern (would benefit notifications)
+  - No singleton pattern (services recreated, acceptable)
+  - No adapter pattern (would benefit third-party integrations)
+  - No builder pattern (would benefit complex query construction)
+
+================================================================================
+18. ENGINEERING MATURITY SCORES
+================================================================================
+
+SCALE: 0 (nonexistent) to 10 (industry-leading)
+
+CATEGORY              | SCORE | JUSTIFICATION
+----------------------|-------|-----------------------------------------------
+Architecture          | 5.5   | Good layering intentions but broken by design —
+                      |       | service layer disconnected, dead code present
+Code Quality          | 5.0   | Clean code style, but dead code, no tests,
+                      |       | JS-only (no TS), inline components in screens
+Backend               | 4.0   | CRUD works but NO AUTH on 50 endpoints, services
+                      |       | unused, no validation, orphaned server.js
+Frontend              | 6.0   | Well-structured, good design system, data-testid
+                      |       | everywhere, but no memoization, full refetch on
+                      |       | each mutation, all data loaded on start
+Database              | 6.5   | Good schema with proper indexes and FKs. JSONB
+                      |       | denormalization concern, text PKs, no migration
+                      |       | runner. Mismatch between schema and service layer.
+Security              | 1.5   | CRITICAL: No auth on CRUD, SHA-256 passwords,
+                      |       | service role key, mass assignment, open CORS,
+                      |       | error leakage, hardcoded JWT secret.
+                      |       | This is the lowest scoring category.
+Scalability           | 2.5   | No pagination, all-data-on-load, no caching,
+                      |       | single-threaded Express, no code splitting,
+                      |       | no message queue, no horizontal scaling support
+Performance           | 3.0   | Full data refetch on every mutation, no caching,
+                      |       | no lazy loading, no bundle splitting,
+                      |       | sequential timeline fetches
+Testing               | 0.0   | No test framework, no tests, no coverage
+Documentation         | 5.0   | Good AGENTS.md, setup docs, backend README.
+                      |       | No API docs (OpenAPI), no architecture decision
+                      |       | records, no JSDoc in code
+Maintainability       | 5.5   | Clean folder structure, but dead code, no tests,
+                      |       | no TypeScript, no CI/CD
+Developer Experience  | 4.5   | yarn workspaces, ESM, good seed data. No hot
+                      |       | reload config for backend, no test command,
+                      |       | npm blocked with custom guard (friction)
+Deployment            | 1.0   | No Docker, no CI/CD, no deployment scripts,
+                      |       | no process manager, manual node start
+Monitoring            | 0.0   | No APM, no structured logging, no metrics,
+                      |       | no health checks, no error tracking
+Reliability           | 2.0   | No graceful shutdown, no error boundaries,
+                      |       | no retry logic, single point of failure
+                      |       | Express process crashes on uncaught exceptions
+----------------------|-------|-----------------------------------------------
+OVERALL AVERAGE       | 3.4   | Early alpha stage. Architecture has good bones
+                      |       | but critical security gaps prevent production use.
+
+================================================================================
+19. INDUSTRY COMPARISON
+================================================================================
+
+COMPARISON           | MATCH     | REASONING
+---------------------|-----------|----------------------------------------------
+Startup MVP          | Matches   | Has working CRUD + auth + UI. Core features
+                     |           | functional. Acceptable for demo/prototype.
+Seed Startup         | Close     | Needs auth on all endpoints, proper password
+                     |           | hashing, and basic testing to qualify.
+Series A             | Far       | Missing: auth, RBAC enforcement, tests,
+                     |           | CI/CD, monitoring, pagination, caching,
+                     |           | Docker deployment, API documentation.
+Series B             | Very Far  | Would need: multi-region deployment, audit
+                     |           | trails fully implemented, SOC2 compliance
+                     |           | readiness, advanced observability, SLA
+                     |           | guarantees, comprehensive test suite.
+Enterprise SaaS      | Extremely | Would need: SSO, SAML/OIDC, audit logging
+                     | Far       | fully working, data retention policies,
+                     |           | GDPR/HIPAA compliance, dedicated support
+                     |           | infrastructure, multi-cloud, disaster recovery.
+FAANG Engineering    | N/A       | Not comparable. Would need: TypeScript,
+Standards            |           | comprehensive test coverage (>90%), code
+                     |           | reviews, feature flags, canary deployments,
+                     |           | performance budgets, accessibility standards,
+                     |           | internal developer platform.
+
+CURRENT STAGE: Early Alpha / Proof of Concept / Internal Demo Tool.
+BEST FIT COMPARISON: Startup MVP with architectural ambition.
+
+================================================================================
+20. RISK ASSESSMENT
+================================================================================
+
+RISK                       | PROBABILITY | IMPACT  | SEVERITY | MITIGATION
+---------------------------|-------------|---------|----------|-------------------------------
+Data breach via unauthenti-| Very High   | Critical| CRITICAL | Add auth middleware to all
+cated CRUD endpoints       | (100%)      |         |          | routes immediately
+---------------------------|-------------|---------|----------|-------------------------------
+Password hash cracking     | Very High   | Critical| CRITICAL | Replace SHA-256 with bcrypt
+                           | (exists)    |         |          | or argon2
+---------------------------|-------------|---------|----------|-------------------------------
+Database compromise via    | Very High   | Critical| CRITICAL | Rotate keys, use anon key
+service_role key exposure  | (committed) |         |          | with RLS policies
+---------------------------|-------------|---------|----------|-------------------------------
+Mass assignment attack     | Very High   | High    | CRITICAL | Add input validation/
+                           | (exists)    |         |          | whitelist to all mutations
+---------------------------|-------------|---------|----------|-------------------------------
+JWT forgery using hard-    | Medium      | Critical| HIGH     | Remove hardcoded fallback,
+coded fallback secret      | (if env miss)|        |          | validate env at startup
+---------------------------|-------------|---------|----------|-------------------------------
+Production failure due to  | High        | High    | HIGH     | Add health checks, process
+no monitoring/logging      |             |         |          | manager, error tracking
+---------------------------|-------------|---------|----------|-------------------------------
+Scaling failure under      | Medium      | High    | HIGH     | Add pagination, caching,
+load (1000+ patients)      |             |         |          | virtualized lists
+---------------------------|-------------|---------|----------|-------------------------------
+Data loss from no backup   | Medium      | High    | MEDIUM   | Configure Supabase backups,
+strategy                   |             |         |          | add export functionality
+---------------------------|-------------|---------|----------|-------------------------------
+Deployment failure from    | High        | Medium  | MEDIUM   | Containerize, add CI/CD,
+no CI/CD                   |             |         |          | create deployment scripts
+---------------------------|-------------|---------|----------|-------------------------------
+Cross-tenant data leak     | Medium      | High    | MEDIUM   | Enforce hospital_id in auth
+(due to no auth at all)    |             |         |          | middleware and all queries
+
+================================================================================
+21. TECHNICAL DEBT
+================================================================================
+
+ITEM                        | PRIORITY | EFFORT | DESCRIPTION
+----------------------------|----------|--------|-----------------------------------
+1. No auth on CRUD endpoints| P0       | 2 days | Wire auth middleware to all routes
+2. SHA-256 password hashing | P0       | 1 day  | Replace with bcrypt/argon2
+3. Service role key usage   | P0       | 1 day  | Switch to anon key + RLS policies
+4. Mass assignment vuln     | P0       | 2 days | Add request validation (Joi/Zod)
+5. Remove hardcoded JWT     | P0       | 0.5 d  | Fail on missing JWT_SECRET
+   fallback                 |          |        |
+6. Live .env in git         | P0       | 0.5 d  | Add to .gitignore, rotate keys
+7. Open CORS                | P1       | 0.5 d  | Whitelist allowed origins
+8. Error message leakage    | P1       | 0.5 d  | Sanitize error responses
+9. Delete orphaned server.js| P1       | 0.1 d  | Remove dead code file
+10. Wire service layer      | P1       | 3 days | Connect auth, RBAC, audit, notif
+    to actual routes        |          |        | services to the request pipeline
+11. Schema-service sync     | P1       | 1 day  | Fix notifications + audit_logs
+    (notifications, audit)  |          |        | schema to match service layer
+12. Role/seed data alignment| P1       | 0.5 d  | Map config roles to seed data
+13. Add pagination to lists | P1       | 3 days | Limit/offset on all list endpoints
+14. No rate limiting        | P1       | 1 day  | Add express-rate-limit
+15. No request size limit   | P1       | 0.1 d  | Add limit to express.json()
+16. Frontend full refetch   | P2       | 5 days | Add optimistic updates or
+    on every mutation       |          |        | granular cache invalidation
+17. No pagination in UI     | P2       | 3 days | Add paginated data loading
+18. All data loaded on start| P2       | 3 days | Lazy load data per screen
+19. No tests                | P2       | 10 d   | Add integration + unit tests
+20. No CI/CD                | P2       | 3 days | GitHub Actions for lint + test
+21. No Docker               | P2       | 2 days | Containerize backend
+22. No monitoring           | P2       | 3 days | Add Sentry + structured logging
+23. No TypeScript           | P3       | 20 d   | Migrate to TypeScript
+24. Text PKs to UUIDs       | P3       | 5 days | Migrate primary keys
+25. Remove JSONB dupl. on   | P3       | 3 days | Remove denormalized columns from
+    patients table          |          |        | patients, use JOINs instead
+26. Inline components to    | P3       | 3 days | Extract to src/components/
+    separate files          |          |        |
+27. Add OpenAPI docs        | P3       | 5 days | Document all API endpoints
+28. App performance opts    | P3       | 5 days | React.memo, FlatList optimization,
+    (memo, virtualized)     |          |        | code splitting
+
+================================================================================
+22. IMPROVEMENT ROADMAP
+================================================================================
+
+22.1 IMMEDIATE FIXES (Week 1) — P0, must fix before ANY production use
+
+  1. AUTHENTICATION ON ALL ENDPOINTS
+     - Apply auth middleware to all CRUD routes via buildRepoRoutes or app.js
+     - Verify every API call requires valid JWT
+     - Files: app.js, build-repo-routes.js, all route modules
+
+  2. PASSWORD HASHING
+     - Replace crypto.createHash('sha256') with bcrypt (npm: bcryptjs)
+     - Re-hash seed data passwords
+     - File: auth.routes.js
+
+  3. INPUT VALIDATION / MASS ASSIGNMENT PREVENTION
+     - Add validation middleware (Zod or Joi)
+     - Whitelist allowed fields per entity for insert/update
+     - File: build-repo-routes.js, create per-entity schemas
+
+  4. SECRETS MANAGEMENT
+     - Add .env to .gitignore
+     - Rotate ALL Supabase keys and JWT secret
+     - Remove hardcoded JWT fallback — fail startup if not set
+     - File: .env (remove from tracking), env.js
+
+  5. CORS RESTRICTION
+     - Configure CORS with whitelist of allowed origins
+     - File: app.js
+
+22.2 SHORT-TERM (Weeks 2-4) — P1, foundational improvements
+
+  6. SERVICE LAYER INTEGRATION
+     - Wire access-control into route handling
+     - Wire audit-log into all mutations
+     - Wire notification-router into mutation responses
+     - Fix schema mismatches first (notifications columns, audit_logs payload)
+
+  7. ERROR HANDLING
+     - Create typed error classes (ValidationError, AuthError, NotFoundError)
+     - Map errors to appropriate HTTP status codes
+     - Sanitize error messages for production
+
+  8. RATE LIMITING & REQUEST VALIDATION
+     - Add express-rate-limit
+     - Add body size limit to express.json()
+     - Add request size limits
+
+  9. DATABASE MIGRATIONS
+     - Create proper migration naming convention
+     - Add migration runner or at minimum apply all migrations in order
+     - Consolidate master.sql with migration files
+
+  10. TESTS
+      - Add vitest or mocha for backend integration tests
+      - Test auth, CRUD, validation paths
+      - Add React Native Testing Library for critical frontend screens
+
+22.3 MEDIUM-TERM (Months 2-3) — P2, production hardening
+
+  11. CI/CD PIPELINE
+      - GitHub Actions: lint → test → build → deploy
+      - Docker containerization with docker-compose
+      - Staging/Production environment separation
+
+  12. FRONTEND ARCHITECTURE IMPROVEMENTS
+      - Paginate all data loading (limit/offset)
+      - Add optimistic updates for mutations
+      - Implement proper caching layer (React Query or SWR)
+      - Lazy load data per screen instead of all-at-once
+      - Extract inline components to separate files
+
+  13. MONITORING & OBSERVABILITY
+      - Add structured logging (pino or winston)
+      - Integrate Sentry for error tracking
+      - Add health check endpoints (GET /health, GET /ready)
+      - Add response time metrics
+
+  14. RBAC ENFORCEMENT
+      - Complete the role-permission mapping
+      - Enforce permissions in route middleware
+      - Add role management UI
+
+13.4 LONG-TERM (Months 3-6) — P3, platform maturity
+
+  15. TYPE SAFETY
+      - Migrate to TypeScript
+      - Define shared types between frontend and backend
+
+  16. DATABASE OPTIMIZATION
+      - Migrate text PKs to UUIDs
+      - Remove denormalized JSONB columns from patients table
+      - Add CHECK constraints and ENUM types
+
+  17. ADVANCED FEATURES
+      - WebSocket real-time updates (Supabase Realtime already configured)
+      - Push notifications (FCM/APNs)
+      - Email notifications
+      - File upload support (lab reports, imaging)
+      - CSV/PDF export
+
+  18. INFRASTRUCTURE
+      - Kubernetes deployment manifests
+      - Database read replicas
+      - CDN for frontend assets
+      - Multi-region deployment
+      - Disaster recovery plan
+
+================================================================================
+23. FINAL VERDICT
+================================================================================
+
+ICU Steward 2.0 is an EARLY-STAGE PROTOTYPE with the skeleton of a
+well-architected product. The codebase demonstrates:
+
+  - Good architectural intentions (layered backend, repository pattern,
+    clean front-end design system, multi-tenant data model)
+  - Working prototype features (patient management, antibiotic stewardship,
+    investigations, tasks, notifications, dashboard)
+  - Realistic and well-constructed seed data for demos
+
+However, the codebase has FUNDAMENTAL FLAWS that prevent any production
+deployment:
+
+  1. COMPLETE LACK OF AUTHENTICATION on all data-access endpoints
+     (50+ CRUD endpoints are publicly accessible)
+
+  2. CRITICAL SECURITY VULNERABILITIES (unsalted SHA-256 passwords,
+     mass assignment, service role key exposure, hardcoded JWT secret,
+     open CORS, error information leakage)
+
+  3. BROKEN ARCHITECTURE (service layer instantiated but entirely
+     disconnected from the request pipeline — auth, RBAC, audit logging,
+     and notification routing are all non-functional)
+
+  4. NO OPERATIONAL INFRASTRUCTURE (no CI/CD, no Docker, no monitoring,
+     no logging, no testing, no backup strategy)
+
+The codebase would require an estimated 3-6 months of intensive engineering
+effort (3-4 person team) to reach production readiness. The architectural
+foundation is solid enough to build upon, and the domain model is well
+thought out. But critical security and operational gaps mean this should
+NOT be deployed in any real healthcare environment today.
+
+HEALTHCARE SPECIFIC CONCERN: For a product handling patient data, the
+security gaps are particularly alarming. HIPAA compliance, data encryption,
+audit trails, and access controls are minimum requirements that this
+codebase completely fails to meet.
+
+================================================================================
+24. OVERALL RATING
+================================================================================
+
+  SECURITY           : 1.5 / 10  ⚠ CRITICAL
+  ARCHITECTURE       : 5.5 / 10
+  CODE QUALITY       : 5.0 / 10
+  BACKEND            : 4.0 / 10
+  FRONTEND           : 6.0 / 10
+  DATABASE           : 6.5 / 10
+  TESTING            : 0.0 / 10  ⚠
+  DOCUMENTATION      : 5.0 / 10
+  SCALABILITY        : 2.5 / 10
+  PERFORMANCE        : 3.0 / 10
+  DEVOPS             : 1.0 / 10  ⚠
+  MONITORING         : 0.0 / 10  ⚠
+  RELIABILITY        : 2.0 / 10
+  MAINTAINABILITY    : 5.5 / 10
+  DEVELOPER EXP      : 4.5 / 10
+
+  ════════════════════════════════════════
+  OVERALL            : 3.4 / 10
+  ════════════════════════════════════════
+
+  BREAKDOWN BY CATEGORY:
+    What works     (score 5+) : Database, Frontend, Architecture, Code Quality
+    What is broken (score <4) : SECURITY, Testing, DevOps, Monitoring,
+                                Scalability, Performance, Reliability
+
+================================================================================
+25. PRODUCTION READINESS ASSESSMENT
+================================================================================
+
+IS THIS CODEBASE PRODUCTION-READY?
+
+  NO. ABSOLUTELY NOT.
+
+REASONS:
+
+  1. CRITICAL SECURITY GAPS make it dangerous to deploy:
+     - No authentication on any data API
+     - Passwords hashed with unsalted SHA-256
+     - Full database admin key exposed
+     - Mass assignment vulnerability on every mutation
+     - JWT can be forged with known string
+
+  2. HEALTHCARE DATA REGULATIONS:
+     - Cannot achieve HIPAA compliance in current state
+     - No audit trail (service exists but is non-functional)
+     - No data encryption at rest (relies on Supabase)
+     - No access controls enforced
+
+  3. OPERATIONAL IMMATURITY:
+     - No way to deploy reliably (no CI/CD, no containers)
+     - No way to detect problems (no monitoring, no logging)
+     - No way to recover from failures (no backup strategy,
+       no graceful shutdown, no health checks)
+     - No way to verify quality (zero tests)
+
+  4. ARCHITECTURAL INCOMPLETENESS:
+     - Service layer fully instantiated but non-functional
+     - RBAC designed but not enforced
+     - Audit logging designed but non-functional
+     - Notification routing designed but non-functional
+
+WHAT IT IS GOOD FOR:
+
+  - Demoing the product concept to investors or stakeholders
+  - UI/UX prototyping and design validation
+  - Development environment for feature experimentation
+  - Starting point for a production-ready rewrite
+
+WHAT IT IS NOT GOOD FOR:
+
+  - Deploying in any real hospital or healthcare setting
+  - Handling actual patient data
+  - Any environment where security, reliability, or compliance matters
+
+================================================================================
+END OF REPORT
+================================================================================

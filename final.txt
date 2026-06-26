@@ -1,0 +1,113 @@
+ICU Steward rollout plan
+
+Goal
+- Replace mock data with Supabase-backed data.
+- Add login and role-based access.
+- Deploy web and ship iOS/Android apps.
+- Support different access levels for doctors, nurses, admins, and future roles.
+- Add alerting so nurse actions can notify doctors when needed.
+
+What we built so far (end-to-end working)
+
+1. Database and migrations
+- Tables + seed data in `backend/supabase/master.sql` — run once in Supabase SQL Editor.
+- Auth columns in `backend/supabase/migrations/001_add_auth_columns.sql`.
+- 14 tables with indexes, RLS, and multi-tenant `hospital_id` separation.
+
+2. Authentication (JWT, not Supabase Auth)
+- Backend: Express REST API with `jsonwebtoken`. `POST /api/auth/login`, `POST /api/auth/signup`, `GET /api/auth/me`.
+- Frontend: `AuthContext` stores user + token in platform storage. Login/signup screens redirect with auth gate.
+- Passwords hashed with SHA-256 (demo-grade; production should use bcrypt).
+- Seed credentials: `meera@stjohn.icu` / `admin123`, `arjun@stjohn.icu` / `consult123`, `isha@stjohn.icu` / `resident123`.
+
+3. Frontend data layer
+- `DataContext` loads all entities via REST API on mount (9 concurrent calls + dashboard + timeline).
+- API client created once at module level (backend uses `service_role` key, no auth needed for data).
+- All screens use `useData()` instead of mock arrays.
+- No loading spinners — content renders immediately, empty states handle missing data.
+
+4. Tab navigation (web fix)
+- `(tabs)/_layout.js` uses `useState` + direct component imports + `display: none` instead of Expo Router's `Tabs`.
+- Reason: Expo Router Tabs on web causes full page reloads when switching tabs.
+- All screens stay mounted (state preserved), only visibility toggles.
+
+5. UI Polish
+- Dashboard: Fixed magic `+1` on positive cultures; `Updated` reads from `hospital.updatedAt`.
+- Settings: Shows actual logged-in user via `useAuth().user`, not `users[0]`.
+- Investigation/antibiotic detail: Removed filler placeholder text; stub action buttons show honest alerts instead of navigating to wrong screens.
+- New resource form: Save button has loading state (disabled + ActivityIndicator + "Saving...").
+- Search: Shows "No results found" empty state.
+- Auth fetch: 10-second AbortController timeout (avoids silent hangs).
+
+Issues faced & fixes (chronological order)
+
+| # | Issue | Root Cause | Fix |
+|---|-------|-----------|-----|
+| 1 | Login button unresponsive — no error, no feedback | `fetch()` has no default timeout; hangs forever when API is unreachable | Added `AbortController` with 10s timeout; shows "Connection timed out. Is the API server running?" |
+| 2 | No session management — login just returned raw user object | Auth was a stub without tokens | Added `jsonwebtoken`, `JWT_SECRET` env var, JWT middleware. Login returns `{ user, token }`. Token stored in `@icu_auth_token`. |
+| 3 | App shows 2-second loading spinner on every start | `AuthContext` called `GET /api/auth/me` on mount to verify stored token | Removed startup `getMe` call. JWT is self-validating; backend rejects expired tokens on each request. |
+| 4 | "query is not defined" crash on Patients screen | Edit that consolidated duplicate `useData()` calls accidentally removed `useState` lines for `query`, `status`, `sortBy` | Restored missing `const [query, setQuery]`, `[status, setStatus]`, `[sortBy, setSortBy]` declarations. |
+| 5 | Tapping tab buttons causes full browser page reload | Custom `TabButton` component spread `{...rest}` onto `TouchableOpacity`, which included `href` prop from React Navigation, causing browser `<a>` tag navigation. Even after removing custom button, Expo Router `Tabs` on web triggers full page reloads. | Replaced Expo Router `Tabs` with `Stack` + direct screen imports + `useState` controlled visibility. Tab switching uses `setActiveTab()`, zero routing, zero network calls. |
+| 6 | 2-second loading spinner on every tab screen | Added `loading` guards that showed `ActivityIndicator` while `DataContext` fetches data | Removed all loading guards from every tab screen. Content renders immediately; empty states handle missing data. |
+| 7 | White flash / brief loading logo when switching tabs | `router.replace()` in custom tab bar triggered full page re-mount | Replaced `router.replace()` with `useState` + `display: none` — no routing involved. |
+| 8 | Dashboard positive cultures count shows wrong number | Hardcoded `+ 1` magic number | Removed `+ 1` — count now matches actual data. |
+| 9 | Dashboard "Updated" shows stale/current time | Used `formatDateTime(new Date().toISOString())` | Changed to `hospital.updatedAt` with fallback `—`. |
+| 10 | Settings shows first user in DB instead of logged-in user | Used `users[0]` from DataContext | Changed to `useAuth().user`. |
+| 11 | Investigation detail has generic placeholder text | "Clinical context" section had lorem-ipsum-style filler | Replaced with actual reminder data: "Automatic reminders repeat every Xh until closed." |
+| 12 | Action buttons navigate to wrong screens | "Mark reviewed" → `/notifications`, "Continue"/"Stop" → `/notifications` | Changed to show `Alert.alert` with honest message: "This will be available in the next update." |
+| 13 | Save button on New Resource shows no feedback | No loading state on the button | Added `saving` state: button shows `ActivityIndicator`, disabled, text changes to "Saving..." |
+| 14 | Search screen shows nothing when query yields no results | No empty state | Added "No results found" with `SearchX` icon and helpful text. |
+| 15 | Data re-fetches on every auth state change | `DataContext` depended on `useAuth()` via `createApiClient(..., token)` | Decoupled: API client created once at module level (no token needed, backend uses `service_role` key for data). |
+
+What still needs to happen
+- Add real-time sync via Supabase Realtime subscriptions (backend already has `ws` dep).
+- Add RLS policies in Supabase for role-based access.
+- Convert to bcrypt for password hashing (currently SHA-256, demo-grade only).
+- Add password reset / invite flow.
+- Add form validation and inline error messages.
+- Add pull-to-refresh on tab screens.
+- Add E2E tests (no test framework yet).
+- Add app icons, splash screens, store metadata.
+- Deploy web (Vercel), build iOS (EAS), build Android (EAS).
+
+Recommended implementation order
+1. Add Supabase Realtime subscriptions for live sync.
+2. Add RLS policies for role-based access.
+3. Replace SHA-256 with bcrypt.
+4. Add pull-to-refresh on all list screens.
+5. Add E2E tests.
+6. Deploy web.
+7. Build and sign iOS and Android.
+
+Cost estimate
+
+Backend
+- Supabase: free dev tier; paid production tier for real usage.
+- Budget extra for database storage, auth, and real-time usage.
+
+Mobile app distribution
+- Apple Developer Program: US$99/year.
+- Google Play Console: US$25 one-time registration fee.
+
+Web hosting
+- Vercel Hobby: free forever.
+- Vercel Pro: US$20/month + usage.
+
+Build and release tooling
+- Expo EAS Free: US$0/month for small-scale use.
+- Expo EAS Starter: US$19/month + usage.
+- Expo EAS Production: US$199/month + usage.
+
+Likely minimum launch budget
+- Solo dev proof of concept: US$0 (free tiers + local builds).
+- Public production launch: Apple US$99/year + Google US$25 + hosting/backend costs.
+- Managed mobile builds: add Expo EAS plan + backend plan.
+
+Notes
+- JavaScript only (no TypeScript anywhere).
+- Yarn v1 only (run `yarn dev` from root for both servers).
+- Node 20.x required.
+- Backend is ESM (`"type": "module"`), all local imports need `.js` extensions.
+- Backend `.env` requires `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`.
+- Frontend `yarn dev` uses `CI=1` to skip interactive Expo prompts.
+- No test framework configured — use `node --check` for backend, manual testing for frontend.
