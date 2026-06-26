@@ -1,0 +1,202 @@
+ICU Steward 2.0 — Experience & Learnings Log
+
+This file captures every issue, fix, decision, and lesson learned while building
+and deploying this full-stack ICU stewardship app.
+
+────────────────────────────────────────────────────────────────────────────
+1. DATABASE & SEED DATA
+────────────────────────────────────────────────────────────────────────────
+
+[1.1] master.sql must be idempotent
+- Use `on conflict (id) do nothing` on every INSERT.
+- If you add a user to master.sql, also add matching entry in the
+  `update users set email...` section (otherwise fresh runs miss auth columns).
+
+[1.2] Renaming a hospital after seed data was deployed
+- master.sql had 'St. John ICU' — later renamed to 'General Hospital'.
+- Cannot edit master.sql (already run). Must write a migration:
+    update hospitals set name = 'General Hospital' where id = 'hosp-st-john';
+- Hospital IDs stay stable even when display name changes.
+
+[1.3] Adding a second hospital (AIIMS)
+- New hospital ID `hosp-aiims` with its own users (Dr. Arushi).
+- Frontend hardcodes ACTIVE_HOSPITAL_ID — multi-tenant switching not built yet.
+- Dr. Arushi logs in but sees General Hospital data (no hospital-scoped queries yet).
+- Lesson: tenant-scoped queries need hospital_id from logged-in user, not a constant.
+
+[1.4] SHA-256 password hashes (demo-grade only)
+- Hashes pre-computed offline and pasted into SQL.
+- `democredential.txt` initially had wrong password (`admin@123` vs `admin123`).
+- Lesson: document exact passwords in one place and keep synced.
+
+────────────────────────────────────────────────────────────────────────────
+2. BACKEND (Express + Supabase + ESM)
+────────────────────────────────────────────────────────────────────────────
+
+[2.1] ESM requires explicit .js extensions
+- `"type": "module"` means imports must use full paths: `'./foo.js'` not `'./foo'`.
+- Forgetting causes cryptic ERR_MODULE_NOT_FOUND.
+
+[2.2] Backend uses service_role key, not anon key
+- .env needs SUPABASE_SERVICE_ROLE_KEY, not SUPABASE_ANON_KEY.
+- Service role bypasses RLS — correct for trusted backend.
+- Lesson: be clear which key goes in which env var.
+
+[2.3] No auth on CRUD routes (by design)
+- build-repo-routes.js does NOT apply auth middleware.
+- Only /api/auth/me is protected.
+- Security audit: P0 (score 1.5/10).
+
+[2.4] CORS * in production
+- cors() with no options allows all origins. Fine for dev, fix for prod.
+
+[2.5] JWT secret was hardcoded
+- Default: `icu-steward-dev-secret-change-in-production`.
+- Must be set via JWT_SECRET env var on Render.
+
+────────────────────────────────────────────────────────────────────────────
+3. FRONTEND (Expo Router v6)
+────────────────────────────────────────────────────────────────────────────
+
+[3.1] Expo Router Tabs triggers full page reloads on web
+- Tabs renders <a> tags — clicking causes full browser navigation.
+- Fix: Replace Tabs with Stack + useState tab index + display:none.
+
+[3.2] router.replace() also triggers re-mounts
+- Even without Tabs, router.replace() causes React tree re-mount.
+- Fix: Switch tabs via state, not routing.
+
+[3.3] API URL must be runtime, not build-time
+- EXPO_PUBLIC_API_URL is evaluated at build time for static exports.
+- Setting it to localhost:4000 during build means deployed app also uses localhost.
+- Fix: window.location.hostname === 'localhost' for runtime detection.
+
+[3.4] Expo SDK version mismatches break web exports
+- react-native-safe-area-context must be ~5.6.0 for Expo 54.
+- react-native-screens must be ~4.16.0.
+- Fix: npx expo install --check.
+
+[3.5] CI=1 suppresses interactive Expo prompts
+- Without CI=1, yarn dev shows "Press a | open Android" — blocks terminal.
+- With CI=1, Expo skips prompts and starts dev server.
+
+[3.6] Auth store keys must be consistent
+- Token as @icu_auth_token, user as @icu_auth_user.
+- Platform shims (web.js / native.js) must use same keys.
+
+[3.7] DataContext must not depend on AuthContext
+- Original created API client with token inside AuthContext.
+- Logout caused DataContext re-fetch with null token.
+- Fix: Create API client once at module level.
+
+[3.8] Fetch needs a timeout
+- Default fetch() has no timeout — login hangs forever if API down.
+- Fix: AbortController with 10s timeout.
+
+[3.9] Preinstall guard removed for Render
+- cmd-guard.js blocked npm installs. Render uses npm by default.
+- Fix: Remove "preinstall" hook from both package.json files.
+
+[3.10] Trailing comma in package.json
+- Removing preinstall line left trailing comma before "lint" — JSON parse error.
+- Fix: Carefully remove entire line including comma.
+
+────────────────────────────────────────────────────────────────────────────
+4. DEPLOYMENT (Render + EAS)
+────────────────────────────────────────────────────────────────────────────
+
+[4.1] Render backend (Web Service)
+- Root: backend/, Build: yarn install, Start: yarn start
+- Env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, JWT_SECRET, APP_ENV
+- Free tier: spins down after inactivity → ~50s cold start.
+- Lesson: warm-up cron or paid plan for production.
+
+[4.2] Render frontend (Static Site)
+- Root: frontend/, Build: yarn install && yarn export-web, Publish: dist
+- SPA routing requires frontend/public/_redirects: /* /index.html 200
+- Without it, page refresh on /patients returns 404.
+
+[4.3] EAS Android APK build
+- Project: 7507f0e9-c382-4f8d-8bc4-7313720d2fc3 (rizsahays-team)
+- Free tier: 30 builds/month. Build: eas build --profile preview --platform android
+- app.json needs Android package + iOS bundleIdentifier.
+- Output: downloadable APK URL (not Play Store).
+
+[4.4] Render auto-deploys on every push to main
+- Both backend + frontend auto-build. No preview before deploy.
+- Lesson: staging branch for pre-deploy review.
+
+[4.5] Railway asked for payment, switched to Render
+- Railway wanted $5/month upfront. Render free tier works.
+
+[4.6] Vercel vercel.json exists but not used
+- Has SPA rewrites. Render simpler for combined deployment.
+
+────────────────────────────────────────────────────────────────────────────
+5. AUTH & LOGIN
+────────────────────────────────────────────────────────────────────────────
+
+[5.1] Login silently failed
+- Used Alert.alert() for errors — not visible on web.
+- Fix: Red error text below password field.
+
+[5.2] Wrong password in credential file
+- democredential.txt had admin@123, actual password was admin123.
+- Lesson: sync credential docs with seed data.
+
+[5.3] Compute SHA-256 correctly
+- echo -n "admin123" | shasum -a 256
+- Wrong hash = silent login failure.
+
+[5.4] JWT token payload: { userId, email, role, hospitalId }
+- Changing JWT_SECRET invalidates all existing tokens.
+
+────────────────────────────────────────────────────────────────────────────
+6. MIGRATIONS STRATEGY
+────────────────────────────────────────────────────────────────────────────
+
+[6.1] Numbered migration files in backend/supabase/migrations/
+- 001: add email + password_hash columns
+- 002: rename St. John → General Hospital, add AIIMS + Dr. Arushi
+- Run manually in Supabase SQL Editor.
+
+[6.2] When adding a new hospital in a migration
+- INSERT into hospitals, then INSERT users under that hospital_id.
+- Ensure password_hash is correct.
+
+[6.3] master.sql vs migrations
+- master.sql = run once from scratch (tables + all seed data)
+- migrations = incremental changes on an already-running DB
+- Both must stay in sync.
+
+────────────────────────────────────────────────────────────────────────────
+7. SECURITY AUDIT (score: 1.5/10)
+────────────────────────────────────────────────────────────────────────────
+
+P0: No auth on CRUD, SHA-256 passwords, CORS *, service role accessible
+P1: No input validation, no rate limiting, no request size limits
+P2: No row-level access control per hospital
+P3: No tests, no CI/CD
+
+Lesson: Demo-grade only. Do NOT put real patient data without addressing P0.
+
+────────────────────────────────────────────────────────────────────────────
+8. LESSONS CHEAT SHEET
+────────────────────────────────────────────────────────────────────────────
+
+  ✓ Write idempotent SQL (on conflict do nothing).
+  ✓ ESM + Node = always use .js extensions in imports.
+  ✓ Expo Router Tabs + web = bad. useState + display:none = good.
+  ✓ Render static sites need _redirects for SPA routing.
+  ✓ Build-time env vars ≠ runtime. Use window.location for runtime detection.
+  ✓ Document all seed passwords in one place and sync religiously.
+  ✓ Remove preinstall guards before deploying to platforms that use npm.
+  ✓ Don't hardcode JWT_SECRET — always use env var.
+  ✓ Match Expo SDK peer deps (npx expo install --check).
+  ✓ AbortController for fetch timeout (10s default).
+  ✓ Decouple data layer from auth layer.
+  ✓ Railway costs $5/mo; Render is free for both backend + frontend.
+  ✓ Hospital IDs are stable, display names can change.
+  ✓ Keep credential files consistent with actual seed data.
+  ✓ Migration files are the source of truth for incremental DB changes.
+  ✓ Security audit early to avoid P0 surprises at launch.
