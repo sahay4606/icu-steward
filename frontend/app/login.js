@@ -2,34 +2,43 @@ import { useState } from 'react';
 import { router } from 'expo-router';
 import {
   ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput,
-  TouchableOpacity, View, StyleSheet, Alert,
+  TouchableOpacity, View, StyleSheet,
 } from 'react-native';
 
 import { colors, radius, typography } from '../src/theme';
 import { useAuth } from '../src/contexts/AuthContext';
+import { API_BASE_URL } from '../src/lib/config';
 
 export default function LoginScreen() {
   const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   async function handleLogin() {
-    if (!email.trim() || !password) return Alert.alert('Missing fields', 'Enter email and password.');
+    setErrorMsg('');
+    if (!email.trim() || !password) {
+      setErrorMsg('Enter email and password.');
+      return;
+    }
     setBusy(true);
+    console.log('[login] Starting login for', email.trim());
+    console.log('[login] API URL:', API_BASE_URL);
     try {
-      await login(email.trim(), password);
+      const result = await login(email.trim(), password);
+      console.log('[login] Success, navigating to tabs');
       router.replace('/(tabs)');
     } catch (e) {
       console.error('[login] Error:', e);
-      Alert.alert('Login failed', e.message);
+      setErrorMsg(e.message || 'Login failed');
     } finally {
       setBusy(false);
     }
   }
 
   function handleGoogle() {
-    Alert.alert('Coming soon', 'Google sign-in will be available in a future update.');
+    setErrorMsg('Google sign-in coming soon.');
   }
 
   return (
@@ -72,11 +81,15 @@ export default function LoginScreen() {
             data-testid="login-password"
           />
 
+          {errorMsg ? (
+            <Text style={styles.error}>{errorMsg}</Text>
+          ) : null}
+
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={handleLogin}
             disabled={busy}
-            style={styles.primaryBtn}
+            style={[styles.primaryBtn, busy && styles.primaryBtnBusy]}
             data-testid="login-submit"
           >
             {busy ? (
@@ -144,7 +157,12 @@ const styles = StyleSheet.create({
     marginTop: 20, backgroundColor: colors.brand.primary, borderRadius: radius.sm,
     paddingVertical: 14, alignItems: 'center',
   },
+  primaryBtnBusy: { opacity: 0.7 },
   primaryBtnText: { fontFamily: typography.bodyMedium, fontSize: 15, fontWeight: '700', color: colors.text.inverse },
+  error: {
+    marginTop: 12, fontFamily: typography.body, fontSize: 13,
+    color: colors.status.critical, textAlign: 'center',
+  },
   divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 20 },
   dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
   dividerText: { marginHorizontal: 12, fontFamily: typography.body, fontSize: 12, color: colors.text.tertiary },
