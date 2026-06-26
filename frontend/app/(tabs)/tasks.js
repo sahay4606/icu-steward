@@ -25,7 +25,7 @@ export default function TasksScreen() {
           .includes(lower);
       return matchesStatus && matchesQuery;
     });
-  }, [status, query]);
+  }, [tasks, status, query]);
 
   if (error && tasks.length === 0) {
     return (

@@ -98,22 +98,26 @@ export function DataProvider({ children }) {
     }
   }, []);
 
+  const triggerRefetch = useCallback(() => {
+    refetchAll().catch(() => {});
+  }, [refetchAll]);
+
   const createEntity = useCallback(async (endpoint, body) => {
     const result = await api.post(endpoint, body);
-    await refetchAll();
+    triggerRefetch();
     return normalizeKeys(result);
-  }, [refetchAll]);
+  }, [triggerRefetch]);
 
   const updateEntity = useCallback(async (endpoint, body) => {
     const result = await api.patch(endpoint, body);
-    await refetchAll();
+    triggerRefetch();
     return normalizeKeys(result);
-  }, [refetchAll]);
+  }, [triggerRefetch]);
 
   const removeEntity = useCallback(async (endpoint) => {
     await api.delete(endpoint);
-    await refetchAll();
-  }, [refetchAll]);
+    triggerRefetch();
+  }, [triggerRefetch]);
 
   const value = useMemo(() => ({
     ...data,

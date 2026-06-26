@@ -79,7 +79,7 @@ export default function PatientsScreen() {
         if (sortBy === 'Risk') return getPatientRiskScore(b) - getPatientRiskScore(a);
         return a.name.localeCompare(b.name);
       });
-  }, [query, status, sortBy]);
+  }, [patients, query, status, sortBy]);
 
   if (error && patients.length === 0) {
     return (

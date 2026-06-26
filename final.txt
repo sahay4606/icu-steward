@@ -1,37 +1,39 @@
-ICU Steward rollout plan
+# ICU Steward Rollout Plan
 
-Goal
+## Goal
 - Replace mock data with Supabase-backed data.
 - Add login and role-based access.
 - Deploy web and ship iOS/Android apps.
 - Support different access levels for doctors, nurses, admins, and future roles.
 - Add alerting so nurse actions can notify doctors when needed.
 
-What we built so far (end-to-end working)
+---
 
-1. Database and migrations
+## What We Built So Far (End-to-End Working)
+
+### 1. Database and Migrations
 - Tables + seed data in `backend/supabase/master.sql` — run once in Supabase SQL Editor.
 - Auth columns in `backend/supabase/migrations/001_add_auth_columns.sql`.
 - 14 tables with indexes, RLS, and multi-tenant `hospital_id` separation.
 
-2. Authentication (JWT, not Supabase Auth)
+### 2. Authentication (JWT, not Supabase Auth)
 - Backend: Express REST API with `jsonwebtoken`. `POST /api/auth/login`, `POST /api/auth/signup`, `GET /api/auth/me`.
 - Frontend: `AuthContext` stores user + token in platform storage. Login/signup screens redirect with auth gate.
 - Passwords hashed with SHA-256 (demo-grade; production should use bcrypt).
 - Seed credentials: `meera@stjohn.icu` / `admin123`, `arjun@stjohn.icu` / `consult123`, `isha@stjohn.icu` / `resident123`.
 
-3. Frontend data layer
+### 3. Frontend Data Layer
 - `DataContext` loads all entities via REST API on mount (9 concurrent calls + dashboard + timeline).
 - API client created once at module level (backend uses `service_role` key, no auth needed for data).
 - All screens use `useData()` instead of mock arrays.
 - No loading spinners — content renders immediately, empty states handle missing data.
 
-4. Tab navigation (web fix)
+### 4. Tab Navigation (Web Fix)
 - `(tabs)/_layout.js` uses `useState` + direct component imports + `display: none` instead of Expo Router's `Tabs`.
 - Reason: Expo Router Tabs on web causes full page reloads when switching tabs.
 - All screens stay mounted (state preserved), only visibility toggles.
 
-5. UI Polish
+### 5. UI Polish
 - Dashboard: Fixed magic `+1` on positive cultures; `Updated` reads from `hospital.updatedAt`.
 - Settings: Shows actual logged-in user via `useAuth().user`, not `users[0]`.
 - Investigation/antibiotic detail: Removed filler placeholder text; stub action buttons show honest alerts instead of navigating to wrong screens.
@@ -39,7 +41,7 @@ What we built so far (end-to-end working)
 - Search: Shows "No results found" empty state.
 - Auth fetch: 10-second AbortController timeout (avoids silent hangs).
 
-Issues faced & fixes (chronological order)
+### Issues Faced & Fixes (Chronological Order)
 
 | # | Issue | Root Cause | Fix |
 |---|-------|-----------|-----|
@@ -59,55 +61,342 @@ Issues faced & fixes (chronological order)
 | 14 | Search screen shows nothing when query yields no results | No empty state | Added "No results found" with `SearchX` icon and helpful text. |
 | 15 | Data re-fetches on every auth state change | `DataContext` depended on `useAuth()` via `createApiClient(..., token)` | Decoupled: API client created once at module level (no token needed, backend uses `service_role` key for data). |
 
-What still needs to happen
-- Add real-time sync via Supabase Realtime subscriptions (backend already has `ws` dep).
-- Add RLS policies in Supabase for role-based access.
-- Convert to bcrypt for password hashing (currently SHA-256, demo-grade only).
-- Add password reset / invite flow.
-- Add form validation and inline error messages.
-- Add pull-to-refresh on tab screens.
-- Add E2E tests (no test framework yet).
-- Add app icons, splash screens, store metadata.
-- Deploy web (Vercel), build iOS (EAS), build Android (EAS).
+---
 
-Recommended implementation order
-1. Add Supabase Realtime subscriptions for live sync.
-2. Add RLS policies for role-based access.
-3. Replace SHA-256 with bcrypt.
-4. Add pull-to-refresh on all list screens.
-5. Add E2E tests.
-6. Deploy web.
-7. Build and sign iOS and Android.
+## Audit Findings & Remediation Roadmap
 
-Cost estimate
+### Audit Summary
 
-Backend
+A full architectural and security audit (June 26, 2026) scored the project at **3.4/10** overall. Key findings:
+
+| Category | Score | Status |
+|----------|-------|--------|
+| Security | **1.5 / 10** ⚠️ | CRITICAL — not production-ready |
+| Testing | **0.0 / 10** ⚠️ | No tests exist |
+| DevOps | **1.0 / 10** ⚠️ | No CI/CD, no Docker |
+| Monitoring | **0.0 / 10** ⚠️ | No error tracking, no structured logging |
+| Scalability | **2.5 / 10** | No pagination, no caching |
+| Performance | **3.0 / 10** | Full refetch on every mutation |
+| Reliability | **2.0 / 10** | No graceful shutdown, no health checks |
+| Backend | **4.0 / 10** | No auth on 50+ endpoints, services unused |
+| Architecture | **5.5 / 10** | Good layering but broken by design |
+| Code Quality | **5.0 / 10** | Clean style but dead code, no tests |
+| Frontend | **6.0 / 10** | Well-structured, good design system |
+| Database | **6.5 / 10** | Good schema, proper indexes |
+| Documentation | **5.0 / 10** | Good README, no API docs |
+
+### Critical Weaknesses (P0 — Must Fix Before Any Production Use)
+
+1. ⚠️ **No auth on 50+ CRUD endpoints** — anyone can read/write/delete all patient data
+2. ⚠️ **Unsalted SHA-256 password hashing** — not bcrypt; passwords crack instantly
+3. ⚠️ **Service role key exposed** — committed to git; full database admin access
+4. ⚠️ **Mass assignment vulnerability** — raw `req.body` passed to DB on insert/update
+5. ⚠️ **Hardcoded JWT secret fallback** (`'icu-steward-dev-secret'`) in `backend/src/config/env.js`
+6. ⚠️ **Open CORS** — no origin restriction on any endpoint
+7. ⚠️ **Error messages leak internal details** — SQL errors, stack traces returned verbatim
+8. ⚠️ **No rate limiting, no request size limits** — brute force and DoS possible
+9. ⚠️ **Services layer fully instantiated but entirely unused** — ~200 lines of dead code
+10. ⚠️ **Orphaned dead code** (`backend/src/server.js`) — references nonexistent files
+11. ⚠️ **Schema mismatches** between service layer and database tables (notifications, audit_logs)
+12. ⚠️ **Role config keys mismatch seed data roles** — RBAC cannot match
+
+### Technical Debt Table (28 Items, Sorted by Priority)
+
+| Priority | Effort | Category | Description |
+|----------|--------|----------|-------------|
+| P0 | 2 days | Security | No auth on CRUD endpoints — wire auth middleware to all routes |
+| P0 | 1 day | Security | SHA-256 password hashing — replace with bcrypt/argon2 |
+| P0 | 1 day | Security | Service role key usage — switch to anon key + RLS policies |
+| P0 | 2 days | Security | Mass assignment vulnerability — add request validation (Zod/Joi) |
+| P0 | 0.5 day | Security | Remove hardcoded JWT fallback — fail on missing `JWT_SECRET` |
+| P0 | 0.5 day | Security | Live `.env` in git — add to `.gitignore`, rotate keys |
+| P1 | 0.5 day | Security | Open CORS — whitelist allowed origins |
+| P1 | 0.5 day | Observability | Error message leakage — sanitize error responses |
+| P1 | 0.1 day | Hygiene | Delete orphaned `backend/src/server.js` |
+| P1 | 3 days | Architecture | Wire service layer (auth, RBAC, audit, notif) to request pipeline |
+| P1 | 1 day | Database | Schema-service sync — fix notifications + audit_logs schema |
+| P1 | 0.5 day | Configuration | Role/seed data alignment — map config roles to seed data |
+| P1 | 3 days | API | Add pagination to all list endpoints (limit/offset) |
+| P1 | 1 day | Security | Add rate limiting (`express-rate-limit`) |
+| P1 | 0.1 day | Security | Add request size limit to `express.json()` |
+| P2 | 5 days | Performance | Frontend full refetch on every mutation — add optimistic updates or cache |
+| P2 | 3 days | Frontend | No pagination in UI — paginated data loading |
+| P2 | 3 days | Frontend | All data loaded on start — lazy load per screen |
+| P2 | 10 days | Testing | No tests — add integration + unit tests |
+| P2 | 3 days | DevOps | No CI/CD — GitHub Actions for lint + test |
+| P2 | 2 days | DevOps | No Docker — containerize backend |
+| P2 | 3 days | Observability | No monitoring — add Sentry + structured logging |
+| P3 | 20 days | Code Quality | No TypeScript — migrate to TypeScript |
+| P3 | 5 days | Database | Text PKs to UUIDs — migrate primary keys |
+| P3 | 3 days | Database | Remove JSONB duplication on patients table — use JOINs |
+| P3 | 3 days | Frontend | Inline components to separate files |
+| P3 | 5 days | Documentation | Add OpenAPI docs |
+| P3 | 5 days | Performance | App performance optimizations (React.memo, FlatList, code splitting) |
+
+### 4-Phase Remediation Plan
+
+#### Phase 1: Immediate Fixes (Week 1) — P0, must fix before ANY production use
+
+**Step 1.1: Add authentication to all CRUD endpoints**
+- `backend/src/app.js`: Apply `authenticateJWT` middleware globally or wrap all route mounts
+- `backend/src/middleware/build-repo-routes.js`: Add auth check as first middleware in each route definition
+- `backend/src/middleware/auth-middleware.js`: Verify the middleware extracts `req.user` correctly
+- Expected: Every `/api/*` endpoint (except login/signup) requires a valid JWT Bearer token
+
+**Step 1.2: Replace SHA-256 with bcrypt**
+- Run: `yarn backend add bcryptjs` (or `npm install bcryptjs` in backend/)
+- `backend/src/modules/auth/auth.routes.js`:
+  - Replace `crypto.createHash('sha256').update(password).digest('hex')` with `bcryptjs.hashSync(password, 10)` on signup (line 33)
+  - Replace hash comparison with `bcryptjs.compareSync(password, user.password_hash)` on login (line 47)
+- `backend/supabase/master.sql` and seed data: Replace SHA-256 hashes with bcrypt hashes of same passwords
+- Expected: Passwords stored as bcrypt hashes with salt; login verifies via bcrypt compare
+
+**Step 1.3: Fix secrets management**
+- Create/update `.gitignore` at repo root and `backend/.gitignore` to include `.env`
+- Run: `git rm --cached backend/.env` to remove tracked `.env` file
+- `backend/src/config/env.js` (line 14): Remove `|| 'icu-steward-dev-secret'` fallback — throw error if `JWT_SECRET` is unset
+- Rotate all Supabase keys (URL, anon key, service role key) and JWT secret via Supabase dashboard
+- Expected: `.env` never committed; server fails to start if `JWT_SECRET` is missing
+
+**Step 1.4: Add input validation / prevent mass assignment**
+- Install validation library: `yarn backend add zod` (or `joi`)
+- `backend/src/middleware/build-repo-routes.js`:
+  - Add `validate(schema)` middleware before `repo.insert(req.body)` and `repo.update(req.params.id, req.body)`
+  - Create per-entity schemas in `backend/src/validation/` (e.g., `patient.schema.js`, `investigation.schema.js`)
+  - Whitelist only allowed fields per entity for insert/update
+- Expected: Only validated, whitelisted fields reach the database
+
+**Step 1.5: Restrict CORS**
+- `backend/src/app.js` (line 24):
+  - Change `app.use(cors())` to `app.use(cors({ origin: ['http://localhost:8081', 'https://aiims-icu.onrender.com'] }))`
+  - Load allowed origins from `CORS_ORIGINS` env var for flexibility
+- Expected: API rejects requests from unknown origins
+
+**Step 1.6: Add rate limiting and request size limits**
+- Run: `yarn backend add express-rate-limit`
+- `backend/src/app.js`:
+  - Add `app.use(express.json({ limit: '1mb' }))` (line 25)
+  - Add global rate limiter: `app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }))`
+  - Add stricter limiter on `/api/auth/login`: `max: 10` per 15 minutes
+- Expected: API rejects oversized payloads and rate-limited requests
+
+#### Phase 2: Short-Term (Weeks 2-4) — P1, foundational improvements
+
+**Step 2.1: Fix schema-service mismatches**
+- `backend/supabase/migrations/003_fix_service_schemas.sql`:
+  - Add missing columns to `notifications`: `source_user_id`, `assigned_doctor_id`, `patient_id`, `channel`
+  - Fix `audit_logs` to accept `payload` as alias for `details`, or update service to send `details`
+  - Ensure `entity_type` and `entity_id` have sensible defaults or are populated
+- `backend/src/services/audit-log.js`: Update `record()` to match schema columns
+- `backend/src/services/notification-router.js`: Update to match updated schema
+- Expected: Services can write to the database without errors
+
+**Step 2.2: Wire service layer into request pipeline**
+- `backend/src/db/backend.js` or `app.js`:
+  - Pass `accessControl`, `auditLog`, `notificationRouter` instances into route builders
+- `backend/src/middleware/build-repo-routes.js`:
+  - Add `accessControl.requireTenantScope(req.user, req.body.hospital_id)` before mutations
+  - Add `auditLog.record({ action, entity_type, entity_id, performed_by, details })` inside each mutation handler
+  - Call `notificationRouter.route(...)` on relevant mutation responses
+- Expected: RBAC enforced, all mutations logged, notifications routed
+
+**Step 2.3: Fix error handling**
+- Create `backend/src/middleware/errors.js`:
+  - Define `ValidationError`, `AuthError`, `NotFoundError` classes with `statusCode` property
+- `backend/src/middleware/error-handler.js`:
+  - Replace `res.status(500).json({ error: err.message })` with:
+    - Map known error types → appropriate HTTP status codes
+    - Return generic message in production: `{ error: 'Internal server error', requestId: uuid }`
+    - In dev/staging, return `err.message` for debugging
+- Expected: No internal details leaked; proper HTTP status codes
+
+**Step 2.4: Fix role/seed data alignment**
+- `backend/src/config/roles.js`:
+  - Rename keys to match seed data: `'Hospital Admin'`, `'ICU Consultant'`, `'Senior Resident'` etc.
+  - Or create a mapping dictionary: `const ROLE_MAP = { 'admin': 'Hospital Admin', ... }`
+- Update `auth.routes.js` signup to accept or derive role properly instead of hardcoded `'Senior Resident'`
+- Expected: Role-based permission checks match actual database values
+
+**Step 2.5: Add pagination to all list endpoints**
+- `backend/src/db/repository.js`:
+  - Modify `list()` to accept `limit` (default 50) and `offset` (default 0) query params
+  - Return total count via `{ data, count }` or `X-Total-Count` header
+- `backend/src/middleware/build-repo-routes.js`:
+  - Pass `req.query.limit`, `req.query.offset` to `repo.list()`
+- Expected: List endpoints return paginated results
+
+**Step 2.6: Delete dead code**
+- Delete `backend/src/server.js`
+- Consider deleting `frontend/src/hooks/use-icon-fonts.js` (stub returning hardcoded values)
+- Expected: Remove code that would crash if imported; reduce maintenance surface
+
+**Step 2.7: Add basic tests**
+- Install `vitest` in backend/
+- Add `backend/tests/` with:
+  - `auth.test.js` — login, signup, token validation
+  - `patients.test.js` — CRUD with auth, pagination, validation
+- Add `backend/tests/setup.js` that sets up test Supabase client
+- Add test script to `backend/package.json`: `"test": "vitest run"`
+- Expected: Basic backend test suite runs and passes
+
+#### Phase 3: Medium-Term (Months 2-3) — P2, production hardening
+
+**Step 3.1: CI/CD Pipeline**
+- Create `.github/workflows/ci.yml`:
+  - Trigger: push to `main`, pull requests
+  - Jobs: `lint → test → build` (backend + frontend)
+  - Lint: `yarn lint` (frontend eslint)
+  - Test: `cd backend && yarn test`
+  - Build: `cd frontend && yarn expo export:web`
+- Create `Dockerfile` in `backend/`:
+  - Multi-stage: `node:20-alpine`, copy `package.json` + `yarn.lock`, install prod deps, copy src/
+  - Expose port 4000, `CMD ["node", "src/index.js"]`
+- Create `docker-compose.yml` at repo root:
+  - Backend service, env vars from `.env`, port mapping 4000:4000
+- Expected: Every PR is linted and tested; backend can be containerized
+
+**Step 3.2: Frontend architecture improvements**
+- `frontend/src/lib/api.js`: Add request timeout (already partially done — make consistent)
+- Implement paginated data loading on list screens (patients, tasks, notifications)
+- Add optimistic updates for mutations using local state + rollback on error
+- `frontend/src/contexts/DataContext.js`:
+  - Replace `refetchAll()` with granular mutation targets (update only changed entity)
+  - Or adopt React Query / SWR pattern for caching
+- Extract inline components (ResultCard, DashboardRow, FormField, PatientCard, etc.) to `frontend/src/components/`
+- Expected: Fast, responsive UI with minimal network overhead
+
+**Step 3.3: Monitoring and observability**
+- Install `pino` in backend/:
+  - Replace `console.log` / `console.error` with `req.log` (pino-http middleware) and explicit logger calls
+  - Log levels: `info`, `warn`, `error`, `debug`
+- Install `@sentry/node`:
+  - Initialize in `backend/src/index.js` with `Sentry.init({ dsn: process.env.SENTRY_DSN })`
+  - Add `Sentry.Handlers.requestHandler()` and `errorHandler()` middleware in `app.js`
+- Add health check endpoints:
+  - `GET /health` — returns `{ status: 'ok' }`
+  - `GET /ready` — checks database connectivity, returns `{ status: 'ok' }` or `503`
+- Expected: Production observability — errors tracked, logs structured, health checks available
+
+**Step 3.4: RBAC enforcement**
+- Complete `backend/src/config/roles.js` permission map
+- `backend/src/middleware/build-repo-routes.js`:
+  - Add `requirePermission('patients.read')` style checks using `accessControl` service
+- Add role management screen to frontend admin users
+- Expected: Users can only read/write what their role allows
+
+#### Phase 4: Long-Term (Months 3-6) — P3, platform maturity
+
+**Step 4.1: TypeScript migration**
+- `backend/`: Add `tsconfig.json`, rename `.js` → `.ts` incrementally
+- `frontend/`: Add TypeScript config, enable strict mode
+- Define shared types package for frontend/backend API contracts
+- Expected: Full type safety across the stack
+
+**Step 4.2: Database optimization**
+- Migrate text primary keys to UUIDs (add new columns, populate, drop old PKs, rename)
+- Remove denormalized JSONB columns from `patients` table — use JOINs instead
+- Add CHECK constraints on status fields, create ENUM types for status/priority/severity/role
+- Add ON DELETE CASCADE on all foreign keys
+- Add unique constraint on `patients.uhid`
+- Expected: Clean, normalized, production-grade schema
+
+**Step 4.3: Advanced features**
+- Enable Supabase Realtime subscriptions for live sync (backend already has `ws` dep)
+- Add push notifications (FCM/APNs via Expo Push API)
+- Add email notifications (SendGrid or similar)
+- Add file upload support (Supabase Storage for lab reports, imaging)
+- Add CSV/PDF export functionality
+- Expected: Real-time collaboration and file management
+
+**Step 4.4: Infrastructure hardening**
+- Kubernetes deployment manifests (Deployment, Service, Ingress, ConfigMap, Secret)
+- Database read replicas for heavy query loads
+- CDN for frontend assets (already on Vercel/Cloudflare)
+- Multi-region deployment strategy
+- Disaster recovery plan with RTO/RPO targets
+- Expected: Enterprise-grade infrastructure
+
+---
+
+## What Still Needs to Happen (Audit-Informed Priority Order)
+
+### Immediate (Must Fix Before Any Production Use)
+
+1. ⚠️ **Add auth middleware to all 50+ CRUD endpoints** — `backend/src/middleware/build-repo-routes.js`, `backend/src/app.js`
+2. ⚠️ **Replace SHA-256 with bcrypt** — `backend/src/modules/auth/auth.routes.js`
+3. ⚠️ **Remove service role key; use anon key + RLS policies** — `backend/src/db/client.js`, create RLS policies in Supabase
+4. ⚠️ **Prevent mass assignment** — add Zod/Joi validation to `build-repo-routes.js`
+5. ⚠️ **Remove hardcoded JWT fallback, validate env at startup** — `backend/src/config/env.js`
+6. ⚠️ **Remove `.env` from git tracking, rotate all keys** — `.gitignore`, Supabase dashboard
+7. ⚠️ **Restrict CORS to whitelisted origins** — `backend/src/app.js`
+8. ⚠️ **Add rate limiting and request size limits** — `backend/src/app.js`
+
+### Short-Term (Weeks 2-4)
+
+9. **Fix notifications + audit_logs schema mismatches** — migration file + service updates
+10. **Wire auth, RBAC, audit, and notification services into route pipeline** — `build-repo-routes.js`, `app.js`
+11. **Sanitize error responses (no internal details leaked)** — `error-handler.js`
+12. **Add pagination (limit/offset) to all list endpoints** — `repository.js`
+13. **Delete dead code: `backend/src/server.js`** and unused service stubs
+14. **Align role config keys with seed data role names** — `roles.js`
+15. **Add basic backend tests (auth, CRUD, validation)** — `vitest`
+
+### Medium-Term (Months 2-3)
+
+16. **Set up CI/CD (GitHub Actions) and Docker** — `.github/workflows/`, `Dockerfile`
+17. **Fix frontend performance: paginated data loading, optimistic updates, cache layer**
+18. **Add monitoring: Sentry, structured logging (pino), health check endpoints**
+19. **Enforce RBAC in route middleware**
+20. **Add pull-to-refresh on all list screens**
+
+### Long-Term (Months 3-6)
+
+21. **Add real-time sync via Supabase Realtime subscriptions**
+22. **Migrate to TypeScript**
+23. **Database optimization: UUID PKs, remove JSONB denormalization, CHECK constraints, ENUMs**
+24. **Add app icons, splash screens, store metadata**
+25. **Add E2E tests**
+26. **Deploy web, build iOS (EAS), build Android (EAS)**
+
+---
+
+## Cost Estimate
+
+### Backend
 - Supabase: free dev tier; paid production tier for real usage.
 - Budget extra for database storage, auth, and real-time usage.
 
-Mobile app distribution
+### Mobile App Distribution
 - Apple Developer Program: US$99/year.
 - Google Play Console: US$25 one-time registration fee.
 
-Web hosting
+### Web Hosting
 - Vercel Hobby: free forever.
 - Vercel Pro: US$20/month + usage.
 
-Build and release tooling
+### Build and Release Tooling
 - Expo EAS Free: US$0/month for small-scale use.
 - Expo EAS Starter: US$19/month + usage.
 - Expo EAS Production: US$199/month + usage.
 
-Likely minimum launch budget
+### Likely Minimum Launch Budget
 - Solo dev proof of concept: US$0 (free tiers + local builds).
 - Public production launch: Apple US$99/year + Google US$25 + hosting/backend costs.
 - Managed mobile builds: add Expo EAS plan + backend plan.
 
-Notes
-- JavaScript only (no TypeScript anywhere).
-- Yarn v1 only (run `yarn dev` from root for both servers).
-- Node 20.x required.
-- Backend is ESM (`"type": "module"`), all local imports need `.js` extensions.
-- Backend `.env` requires `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`.
-- Frontend `yarn dev` uses `CI=1` to skip interactive Expo prompts.
-- No test framework configured — use `node --check` for backend, manual testing for frontend.
+---
+
+## Notes
+
+- ⚠️ **Security is the #1 priority**. The entire CRUD API is publicly accessible with no auth. Do not deploy anywhere until Phase 1 remediation is complete.
+- **JavaScript only** (no TypeScript anywhere).
+- **Yarn v1 only** (run `yarn dev` from root for both servers).
+- **Node 20.x required.**
+- **Backend is ESM** (`"type": "module"`), all local imports need `.js` extensions.
+- **Backend `.env` requires** `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`. (After Phase 1, `SUPABASE_SERVICE_ROLE_KEY` should be removed in favor of `SUPABASE_ANON_KEY` + RLS.)
+- **Frontend `yarn dev` uses `CI=1`** to skip interactive Expo prompts.
+- **No test framework configured** — use `vitest` for backend, React Native Testing Library for frontend (recommended in Phase 2).
+- **Dead code present**: `backend/src/server.js` references nonexistent files and would crash if executed. `backend/src/services/*.js` are instantiated but never wired into routes. Delete or wire them during remediation.
+- **Schema mismatches exist**: `notifications` table is missing columns expected by `notification-router.js`; `audit_logs` service passes `payload` key but schema expects `details`. Fix in Phase 2 Step 2.1.
+- **Role config keys** (`admin`, `doctor`, `nurse`) in `backend/src/config/roles.js` do not match seed data role names (`Hospital Admin`, `ICU Consultant`, `Senior Resident`). Fix in Phase 2 Step 2.4.
+- **Frontend hardcodes** `ACTIVE_HOSPITAL_ID = 'hosp-st-john'` and `ACTIVE_USER_ID = 'u-admin'` in `src/lib/config.js`. After auth is enforced, derive these from the authenticated user's JWT at runtime.

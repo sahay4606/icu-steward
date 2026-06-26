@@ -14,7 +14,7 @@ function SeverityIcon({ severity }) {
 }
 
 export default function NotificationsScreen() {
-  const { notifications, error } = useData();
+  const { notifications, acknowledgeNotification, error } = useData();
   const [query, setQuery] = useState('');
   const [onlyOpen, setOnlyOpen] = useState(true);
   const [acknowledged, setAcknowledged] = useState({});
@@ -80,7 +80,10 @@ export default function NotificationsScreen() {
             <TouchableOpacity
               key={item.id}
               activeOpacity={0.7}
-              onPress={() => setAcknowledged((prev) => ({ ...prev, [item.id]: true }))}
+              onPress={() => {
+                setAcknowledged((prev) => ({ ...prev, [item.id]: true }));
+                acknowledgeNotification(item.id);
+              }}
               data-testid={`notification-card-${item.id}`}
             >
               <Surface style={[styles.card, done && styles.cardDone]}>

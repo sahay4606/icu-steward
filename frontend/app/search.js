@@ -47,7 +47,7 @@ export default function SearchScreen() {
       doctors: docs,
       hasAny: p.length > 0 || inv.length > 0 || abx.length > 0 || docs.length > 0,
     };
-  }, [query]);
+  }, [query, patients, investigations, antibiotics, users]);
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>

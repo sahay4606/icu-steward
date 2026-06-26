@@ -107,11 +107,35 @@ export default function NewResourceScreen() {
 
   const Icon = iconMap[resourceType] || FilePlus2;
 
+  const FIELD_MAP = {
+    patient: { admission: 'admission_date', expected: 'expected_discharge' },
+    investigation: { title: 'name', patient: 'patient_name', lab: 'lab_name', due: 'expected_report_date' },
+    antibiotic: { drug: 'drug_name', patient: 'patient_name' },
+    task: { patient: 'patient_name', assignedTo: 'assigned_to', due: 'due_time' },
+  };
+
+  function mapFields(type, raw) {
+    let mapped = { ...raw };
+    const mapping = FIELD_MAP[type] || {};
+    for (const [key, col] of Object.entries(mapping)) {
+      if (key in mapped) {
+        mapped[col] = mapped[key];
+        if (key !== col) delete mapped[key];
+      }
+    }
+    if (mapped.age) mapped.age = parseInt(mapped.age, 10) || null;
+    if ((type === 'investigation' || type === 'antibiotic' || type === 'task') && raw.patient) {
+      const match = patients.find((p) => p.name === raw.patient);
+      if (match) mapped.patient_id = match.id;
+    }
+    return mapped;
+  }
+
   async function handleSave() {
     if (saving) return;
     setSaving(true);
     try {
-      const payload = form;
+      const payload = mapFields(resourceType, form);
       if (resourceType === 'patient') await createPatient(payload);
       else if (resourceType === 'investigation') await createInvestigation(payload);
       else if (resourceType === 'antibiotic') await createAntibiotic(payload);

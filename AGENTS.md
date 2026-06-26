@@ -1,96 +1,89 @@
 # ICU Steward 2.0 — Agent Guidelines
 
 ## Project
-Yarn v1 workspaces monorepo: `frontend/` (Expo Router app) + `backend/` (Supabase domain scaffold).
 
-**Must use `yarn` never `npm`** — the preinstall guard at `frontend/scripts/cmd-guard.js` rejects npm.
+Yarn v1 workspaces monorepo: `frontend/` (Expo Router app) + `backend/` (Express + Supabase).
+
+**Use `yarn` never `npm`** — root `package.json` uses `yarn workspace` commands. A `cmd-guard.js` exists but is not wired as a preinstall hook; rely on yarn regardless.
 
 ## Commands (run from repo root)
+
 | Command | Action |
 |---------|--------|
-| `yarn dev` | API (port 4000) + Expo (port 8081) in parallel |
-| `yarn start` | Expo dev server (port 8081) |
-| `yarn web` / `yarn ios` / `yarn android` | Platform-specific |
-| `yarn lint` | `expo lint` (frontend only) |
+| `yarn dev` | API (port 4000) + Expo (port 8081) in parallel via `concurrently` |
+| `yarn start` / `yarn web` / `yarn ios` / `yarn android` | Platform-specific Expo |
+| `yarn lint` | Frontend only (`expo lint`) |
+| `cd backend && yarn start` | API server only |
+| `cd backend && yarn dev` | API server with `--watch` |
 | `node --check backend/src/index.js` | Backend syntax check |
-| `cd backend && yarn start` | API server only (port 4000) |
-| `cd backend && yarn dev` | API server with watch |
 
-No test framework configured. Manual verification only.
+No tests exist anywhere in the repo. Manual verification only.
 
-## Frontend (Expo Router v6, React Native 0.81, Expo 54, JavaScript only)
-- **Routes** — file-based under `frontend/app/`. Tabbed screens in `(tabs)/`. Detail screens at `patients/[id].js`, `investigations/[id].js`, `antibiotics/[id].js`.
-- **Shared code** — `src/components/` (reusable UI), `src/lib/` (API client + formatters), `src/data/mock.js` (static helpers only), `src/hooks/`, `src/theme.js` (design tokens).
-- **Storage** — platform shims at `src/utils/storage/` (`.native.js` / `.web.js` pattern).
-- **Multi-tenant** — all entities carry `hospital_id`. Frontend uses `ACTIVE_HOSPITAL_ID = 'hosp-st-john'` in `config.js`.
-- **Style** — white-card on `#F4F6F9` background. Design tokens in `src/theme.js` (colors, spacing, radius, typography, shadow). Every interactive element must have `data-testid`.
-- **Icons** — `lucide-react-native`.
+## Backend
 
-### Tab navigation (web-specific fix)
-`(tabs)/_layout.js` does NOT use Expo Router's `Tabs` component — it imports screen components directly and switches with `useState` + `display: none`. Reason: Expo Router Tabs on web causes full page reloads when switching tabs. All tab screens stay mounted (state preserved), only visibility toggles.
+- **Entrypoint** `backend/src/index.js` → `backend/src/app.js` (modular, routes as middleware fns). `backend/src/server.js` is a stale monolithic version — do not edit.
+- ESM (`"type": "module"`). All imports must use explicit `.js` extensions.
+- `createApp()` in `app.js` wires 11 entity route modules + 4 special routes (`auth`, `dashboard`, `profile`, `hospital-settings`). Each entity module calls `buildRepoRoutes()` from `middleware/build-repo-routes.js` — **no auth middleware is applied to CRUD endpoints**.
+- Route modules live in `backend/src/modules/<entity>/<entity>.routes.js`. Domain data access in `backend/src/domain/`. Services in `backend/src/services/`.
+- Repo pattern: `createRepository(client, tableName)` in `db/repository.js` provides `list/getById/insert/update/remove`. All entities carry `hospital_id` for tenant scoping.
+- `.env` (gitignored) template at `.env.example` requires `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `APP_ENV`.
 
-### Auth
-- JWT-based auth with `jsonwebtoken` on backend, `Bearer` token on frontend.
-- Login/signup return `{ user, token }`. Token stored in `@icu_auth_token`, user in `@icu_auth_user` (via platform storage).
-- No token verification on every startup — JWT is self-validating; backend rejects expired tokens.
-- `AuthContext` provides `{ user, token, login, signup, logout, isAuthenticated }`.
-- Login credentials (seed):
+## Frontend
+
+- **Expo Router v6** (file-based routes in `frontend/app/`). Entry: `expo-router/entry`.
+- `(tabs)/_layout.js` uses `useState` + `display: none` instead of Expo Router's `Tabs` — avoids full-page reloads on web. Tab screens stay mounted.
+- Dynamic detail routes: `patients/[id].js`, `investigations/[id].js`, `antibiotics/[id].js`. New/create route at `new.js`. Global search at `search.js`.
+- **`DataContext` does not depend on `AuthContext`** — API client created at module level without a token. Data endpoints on backend have no auth guard anyway.
+- API responses use snake_case; frontend normalizes to camelCase via `normalizeKeys()` from `src/lib/format.js`. Use camelCase everywhere in JS.
+- `src/lib/config.js` hardcodes `ACTIVE_HOSPITAL_ID = 'hosp-st-john'` and `ACTIVE_USER_ID = 'u-admin'`. Override API URL via `EXPO_PUBLIC_API_URL` env var (defaults to `https://icu-steward-api.onrender.com`, falls back to `localhost:4000` when `window.location.hostname === 'localhost'`).
+- Platform storage shims at `src/utils/storage/` (`.native.js`/`.web.js` pattern).
+- Design tokens: `src/theme.js` (colors, spacing, radius, typography, shadow). White cards on `#F4F6F9`. Icons: `lucide-react-native`.
+- Every interactive element must have `data-testid`.
+
+## Database (Supabase)
+
+- URL: `https://zxdcyfwfquoptkpnwrzu.supabase.co`
+- `backend/supabase/master.sql` — full schema + seed data (run once in SQL Editor).
+- Incremental migrations in `backend/supabase/migrations/` — run in order:
+  1. `00001_create_tables.sql` — schema (if master.sql not run)
+  2. `001_add_auth_columns.sql` — adds `email` + `password_hash`
+  3. `002_add_drarushi_user.sql` — renames St. John → General Hospital, adds AIIMS + Dr. Arushi
+- Backend uses `service_role` key (bypasses RLS — trusted server context).
+
+## Auth
+
+- JWT-based (`jsonwebtoken`). Login/signup return `{ user, token }`. `/api/auth/me` is the only protected route (uses `auth-middleware.js` Bearer token check).
+- Token stored as `@icu_auth_token`, user as `@icu_auth_user` via platform storage.
+- `AuthContext` provides `{ user, token, login, signup, logout, isAuthenticated }`. On startup, verifies stored token via `authService.getMe()`.
+- Test credentials:
   - `meera@stjohn.icu` / `admin123` — Hospital Admin (General Hospital)
   - `arjun@stjohn.icu` / `consult123` — ICU Consultant (General Hospital)
   - `isha@stjohn.icu` / `resident123` — Senior Resident (General Hospital)
   - `drarushitest@gmail.com` / `aiimsonian` — ICU Consultant (AIIMS)
+- ⚠️ Passwords stored as SHA-256 (not bcrypt). DO NOT use in production.
 
-### Data fetching
-- `DataContext` does NOT depend on `AuthContext` — API client created once at module level (backend uses `service_role` key, no auth needed for data endpoints).
-- All entities loaded on mount via `Promise.all` (9 concurrent calls + dashboard + timeline for first 3 patients).
-- Loading spinners removed from all screens — content renders immediately with whatever data is available (empty states handle missing data).
+## Deploy
 
-### Deployments
-- **Backend API**: `https://icu-steward-api.onrender.com` (Render Web Service, free tier)
-- **Frontend Web**: `https://aiims-icu.onrender.com` (Render Static Site, free tier, SPA via `_redirects`)
-- **Android APK**: built via EAS Free tier, download at `https://expo.dev/artifacts/eas/NbxuBdL1sOYML9iNfwQP0r8GV469JC3s_qDyfd-rHqM.apk`
-- **Render auto-deploys** on every push to `main`. Free tier caveat: backend spins down after ~50s inactivity (~50s cold start).
-- **EAS project ID**: `7507f0e9-c382-4f8d-8bc4-7313720d2fc3`
+| Target | URL / Command |
+|--------|--------------|
+| Backend API (Render) | `https://icu-steward-api.onrender.com` (free tier, ~50s cold start) |
+| Frontend Web (Render) | `https://aiims-icu.onrender.com` (SPA via `public/_redirects`) |
+| Android APK (EAS) | `eas build --profile preview --platform android` (project `7507f0e9-c382-4f8d-8bc4-7313720d2fc3`) |
+| Render auto-deploys | Every push to `main` |
 
-### UI Polish applied
-- **Dashboard**: Removed magic `+1` on positive cultures count; `Updated` time reads from `hospital.updatedAt` instead of `new Date().toISOString()`.
-- **Settings**: Uses `useAuth().user` instead of `users[0]` (shows actual logged-in user).
-- **Investigation Detail**: Replaced placeholder filler text with real reminder data; action buttons show honest alerts instead of navigating to wrong screens.
-- **Antibiotic Detail**: "Continue"/"Stop" buttons show alerts instead of navigating to wrong screens.
-- **New Resource**: Save button has loading state (disabled + ActivityIndicator + "Saving...").
-- **Search**: Shows "No results found" empty state when query yields no matches.
-- **Auth fetch**: 10-second timeout via `AbortController` (avoids silent hangs when API is down).
-
-## Backend (ESM, `"type": "module"`)
-- Entrypoint `backend/src/index.js` exports factory functions (e.g. `createPatientsRepository`) that accept a Supabase client.
-- REST server at `backend/src/server.js` (Express, port 4000) — maps `/api/*` routes to repositories.
-- Domain files in `backend/src/domain/` — one per entity (patients, investigations, etc.).
-- Services in `backend/src/services/` — auth, access-control, audit-log, notification-router.
-- Credentials in `backend/.env` (gitignored). `.env.example` has the template.
-- `JWT_SECRET` env var required for auth (defaults to `icu-steward-dev-secret` in dev).
-- Migration SQL at `backend/supabase/master.sql` — run entire file in Supabase SQL Editor once to create tables + seed data. Includes both General Hospital (`hosp-st-john`) and AIIMS (`hosp-aiims`) hospitals.
-- Incremental migrations at `backend/supabase/migrations/` — run in order:
-  1. `001_add_auth_columns.sql` — add email/password_hash if master.sql was run before auth columns existed
-  2. `002_add_drarushi_user.sql` — rename St. John → General Hospital, add AIIMS hospital + Dr. Arushi user
-- Supabase URL: `https://zxdcyfwfquoptkpnwrzu.supabase.co`
-- `service_role` key in backend `.env` (bypasses RLS — trusted server context).
-- Install separately with `cd backend && yarn install`.
-- Start server: `cd backend && yarn start` (or `yarn dev` for watch mode).
+`frontend/vercel.json` also configured for Vercel (SPA rewrites).
 
 ## Conventions
-- **JavaScript only** (no TypeScript anywhere).
-- **Functional components**, lowercase-kebab or `[id].js` route filenames.
-- Commit messages use imperative style (`feat: ...`, `fix: ...`).
-- Backend must use explicit `.js` extensions in all ESM imports.
-- `yarn dev` from root uses `concurrently` to run both servers; frontend uses `CI=1` to skip interactive Expo prompts.
 
-## Security Audit Status
-Full audit at `PROJECT_TECHNICAL_AUDIT_REPORT.txt` — score 1.5/10. Key issues (not yet addressed):
-- P0: No auth checks on 50+ CRUD endpoints (only `/api/auth/login`, `/api/auth/signup`, `/api/auth/me` are secured)
-- P0: Passwords stored as SHA-256 (not bcrypt)
-- P0: CORS set to `*` in production
-- P1: No input validation/sanitization
-- P1: No rate limiting
-- P1: Service role key usable from anon context (no RLS policies defined)
-- P2: No row-level access control per hospital
-- P3: No tests, no CI/CD
+- **JavaScript only** — no TypeScript anywhere.
+- Functional components. Filenames: lowercase-kebab or `[id].js`.
+- Commit messages: imperative style (`feat: ...`, `fix: ...`).
+- `yarn dev` root command: frontend runs with `CI=1` (skips interactive Expo prompts).
+
+## Security
+
+Full audit at `PROJECT_TECHNICAL_AUDIT_REPORT.txt` (score 1.5/10). Critical known issues:
+- No auth on 50+ CRUD endpoints
+- Passwords as SHA-256
+- CORS `*` in production
+- No input validation, rate limiting, or RLS policies
