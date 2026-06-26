@@ -1,12 +1,14 @@
 {
   "expo": {
     "name": "ICU Steward",
-    "slug": "icu-steward",
+    "slug": "icu",
     "scheme": "icu-steward",
     "version": "2.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router"
+    ],
     "web": {
       "bundler": "metro"
     },
@@ -19,7 +21,11 @@
       "backgroundColor": "#F4F6F9"
     },
     "extra": {
-      "apiUrl": "https://icu-steward-api.onrender.com"
-    }
+      "router": {},
+      "eas": {
+        "projectId": "7507f0e9-c382-4f8d-8bc4-7313720d2fc3"
+      }
+    },
+    "owner": "rizsahays-team"
   }
 }

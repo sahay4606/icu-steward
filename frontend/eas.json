@@ -5,6 +5,10 @@
         "buildType": "apk"
       }
     },
-    "production": {}
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://icu-steward-api.onrender.com"
+      }
+    }
   }
 }
