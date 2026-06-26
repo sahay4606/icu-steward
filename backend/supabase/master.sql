@@ -288,20 +288,22 @@ alter table users add column if not exists password_hash text;
 update users set email='meera@stjohn.icu',   password_hash='240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9' where id='u-admin' and email is null;
 update users set email='arjun@stjohn.icu',   password_hash='aba1dcd38408657aa7876b03edfb8fd74aab2b95e2eda5cf258202c7cd5ee64c' where id='u-consultant' and email is null;
 update users set email='isha@stjohn.icu',    password_hash='2a2b8801afe2d9e5f47c5b786d8d349ce3d0b46f94c84bd5608abe1c2c75bb84' where id='u-resident' and email is null;
+update users set email='drarushitest@gmail.com', password_hash='ebc548f3d08ce356cfd8d06bde1911661f27834f587164d183eb943bb615e35f' where id='u-arushi' and email is null;
 
 -- ═══════════════════════════════════════════════════════════
 -- 5. Seed Data
 -- ═══════════════════════════════════════════════════════════
 
 insert into hospitals (id, name, city, beds, plan, sync_status) values
-  ('hosp-st-john', 'St. John ICU', 'Bengaluru', 24, 'Pilot', 'Live'),
-  ('hosp-green-valley', 'Green Valley ICU', 'Mumbai', 18, 'Enterprise', 'Live')
+  ('hosp-st-john', 'General Hospital', 'Bengaluru', 24, 'Pilot', 'Live'),
+  ('hosp-aiims', 'AIIMS General', 'Delhi', 30, 'Pilot', 'Live')
 on conflict (id) do nothing;
 
 insert into users (id, hospital_id, name, email, password_hash, role, unit, status) values
-  ('u-admin',       'hosp-st-john', 'Dr. Meera Rao',    'meera@stjohn.icu',  '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 'Hospital Admin',  'ICU',          'Active'),
-  ('u-consultant',  'hosp-st-john', 'Dr. Arjun Nair',   'arjun@stjohn.icu',  'aba1dcd38408657aa7876b03edfb8fd74aab2b95e2eda5cf258202c7cd5ee64c', 'ICU Consultant',  'Medical ICU',  'Active'),
-  ('u-resident',    'hosp-st-john', 'Dr. Isha Khan',    'isha@stjohn.icu',  '2a2b8801afe2d9e5f47c5b786d8d349ce3d0b46f94c84bd5608abe1c2c75bb84', 'Senior Resident', 'Surgical ICU', 'Active')
+  ('u-admin',       'hosp-st-john', 'Dr. Meera Rao',   'meera@stjohn.icu',  '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 'Hospital Admin',  'ICU',          'Active'),
+  ('u-consultant',  'hosp-st-john', 'Dr. Arjun Nair',  'arjun@stjohn.icu',  'aba1dcd38408657aa7876b03edfb8fd74aab2b95e2eda5cf258202c7cd5ee64c', 'ICU Consultant',  'Medical ICU',  'Active'),
+  ('u-resident',    'hosp-st-john', 'Dr. Isha Khan',   'isha@stjohn.icu',  '2a2b8801afe2d9e5f47c5b786d8d349ce3d0b46f94c84bd5608abe1c2c75bb84', 'Senior Resident', 'Surgical ICU', 'Active'),
+  ('u-arushi',      'hosp-aiims',   'Arushi',          'drarushitest@gmail.com', 'ebc548f3d08ce356cfd8d06bde1911661f27834f587164d183eb943bb615e35f', 'ICU Consultant',  'Medical ICU',  'Active')
 on conflict (id) do nothing;
 
 insert into patients (id, hospital_id, uhid, name, age, gender, bed, consultant, diagnosis,
