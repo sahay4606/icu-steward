@@ -1,0 +1,5 @@
+{
+  "buildCommand": "yarn export-web",
+  "outputDirectory": "dist",
+  "framework": null
+}
