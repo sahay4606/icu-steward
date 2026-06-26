@@ -11,10 +11,15 @@
       "bundler": "metro"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.icusteward.app"
     },
     "android": {
+      "package": "com.icusteward.app",
       "backgroundColor": "#F4F6F9"
+    },
+    "extra": {
+      "apiUrl": "https://icu-steward-api.onrender.com"
     }
   }
 }
