@@ -13,5 +13,8 @@ export const BACKEND_TABLES = {
   auditLogs: 'audit_logs',
   sessions: 'sessions',
   roleAssignments: 'role_assignments',
+  cultures: 'cultures',
+  cultureOrganisms: 'culture_organisms',
+  cultureSensitivities: 'culture_sensitivities',
 };
 

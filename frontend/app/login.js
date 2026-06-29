@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { router } from 'expo-router';
 import {
   ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput,
   TouchableOpacity, View, StyleSheet,
 } from 'react-native';
 
-import { colors, radius, typography } from '../src/theme';
+import { radius, typography } from '../src/theme';
+import { useThemeColors } from '../src/contexts/ThemeContext';
 import { useAuth } from '../src/contexts/AuthContext';
 import { API_BASE_URL } from '../src/lib/config';
 
@@ -15,6 +16,8 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   async function handleLogin() {
     setErrorMsg('');
@@ -131,7 +134,7 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) { return StyleSheet.create({
   wrapper: { flex: 1, backgroundColor: colors.background },
   content: { flexGrow: 1, justifyContent: 'center', padding: 24 },
   header: { alignItems: 'center', marginBottom: 32 },
@@ -174,4 +177,4 @@ const styles = StyleSheet.create({
   switchRow: { alignItems: 'center', marginTop: 24 },
   switchText: { fontFamily: typography.body, fontSize: 13, color: colors.text.secondary },
   switchLink: { color: colors.brand.primary, fontWeight: '700' },
-});
+}); }

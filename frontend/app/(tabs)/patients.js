@@ -3,13 +3,15 @@ import { BedDouble, Filter, Search, UserPlus } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { ScrollView, Text, View, TouchableOpacity, StyleSheet } from 'react-native';
 
-import { Surface, SectionHeader, SearchField, ToggleChip, Pill } from '../../src/components/ui';
-import { colors, typography } from '../../src/theme';
-import { filters, getPatientRiskScore } from '../../src/data/mock';
+import { Surface, SectionHeader, SearchField, Pill } from '../../src/components/ui';
+import { Dropdown } from '../../src/components/dropdown';
+import { typography } from '../../src/theme';
+import { useThemeColors } from '../../src/contexts/ThemeContext';
+import { getPatientRiskScore } from '../../src/data/mock';
 import { useData } from '../../src/contexts/DataContext';
 import { formatDate, daysBetween } from '../../src/lib/format';
 
-function PatientCard({ patient }) {
+function PatientCard({ patient, styles }) {
   const risk = getPatientRiskScore(patient);
   return (
     <TouchableOpacity
@@ -59,6 +61,8 @@ export default function PatientsScreen() {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('All');
   const [sortBy, setSortBy] = useState('Bed');
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const visible = useMemo(() => {
     const lower = query.trim().toLowerCase();
@@ -107,28 +111,18 @@ export default function PatientsScreen() {
           placeholder="Search patient, UHID, bed, doctor, diagnosis"
           testId="patients-search"
         />
-        <View style={styles.filterRow}>
-          {filters.patientStatus.map((item) => (
-            <ToggleChip
-              key={item}
-              label={item}
-              selected={status === item}
-              onPress={() => setStatus(item)}
-              testId={`patients-filter-${item}`}
-            />
-          ))}
-        </View>
-        <View style={styles.filterRow}>
-          {['Bed', 'Recent', 'Risk', 'Name'].map((item) => (
-            <ToggleChip
-              key={item}
-              label={`Sort: ${item}`}
-              selected={sortBy === item}
-              onPress={() => setSortBy(item)}
-              testId={`patients-sort-${item}`}
-            />
-          ))}
-        </View>
+        <Dropdown
+          options={['All', 'Requires attention', 'Under review', 'Stable']}
+          value={status}
+          onSelect={(value) => setStatus(value)}
+          testId="patients-status-filter"
+        />
+        <Dropdown
+          options={['Bed', 'Recent', 'Risk', 'Name']}
+          value={sortBy}
+          onSelect={(value) => setSortBy(value)}
+          testId="patients-sort"
+        />
       </Surface>
 
       <View style={styles.summaryRow}>
@@ -138,20 +132,25 @@ export default function PatientsScreen() {
           <Text style={styles.summaryLabel}>On roster</Text>
         </Surface>
         <Surface style={styles.summaryCard}>
-          <Filter color={colors.status.warning} size={18} strokeWidth={2} />
-          <Text style={styles.summaryValue}>{visible.length}</Text>
-          <Text style={styles.summaryLabel}>Visible now</Text>
+          <Filter color={colors.status.critical} size={18} strokeWidth={2} />
+          <Text style={styles.summaryValue}>{patients.filter((p) => p.status === 'Requires attention').length}</Text>
+          <Text style={styles.summaryLabel}>Attention</Text>
+        </Surface>
+        <Surface style={styles.summaryCard}>
+          <Search color={colors.status.warning} size={18} strokeWidth={2} />
+          <Text style={styles.summaryValue}>{patients.filter((p) => p.status === 'Under review').length}</Text>
+          <Text style={styles.summaryLabel}>Under review</Text>
         </Surface>
         <Surface style={styles.summaryCard}>
           <UserPlus color={colors.status.safe} size={18} strokeWidth={2} />
-          <Text style={styles.summaryValue}>{patients.filter((item) => item.status !== 'Stable').length}</Text>
-          <Text style={styles.summaryLabel}>Needs review</Text>
+          <Text style={styles.summaryValue}>{patients.filter((p) => p.status === 'Stable').length}</Text>
+          <Text style={styles.summaryLabel}>Stable</Text>
         </Surface>
       </View>
 
       <View style={styles.list}>
         {visible.map((patient) => (
-          <PatientCard key={patient.id} patient={patient} />
+          <PatientCard key={patient.id} patient={patient} styles={styles} />
         ))}
         {visible.length === 0 ? (
           <Surface style={styles.empty}>
@@ -165,7 +164,7 @@ export default function PatientsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) { return StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
@@ -178,11 +177,7 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 12,
   },
-  filterRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
+
   summaryRow: {
     flexDirection: 'row',
     gap: 10,
@@ -275,4 +270,4 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.text.secondary,
   },
-});
+}); }

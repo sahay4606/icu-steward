@@ -200,3 +200,279 @@ Lesson: Demo-grade only. Do NOT put real patient data without addressing P0.
   ✓ Keep credential files consistent with actual seed data.
   ✓ Migration files are the source of truth for incremental DB changes.
   ✓ Security audit early to avoid P0 surprises at launch.
+
+────────────────────────────────────────────────────────────────────────────
+9. THEME / DARK MODE (ThemeContext + useThemeColors)
+────────────────────────────────────────────────────────────────────────────
+
+[9.1] StyleSheet.create() at module level captures static imports, NOT
+    component-level variables.
+- WRONG: `const styles = StyleSheet.create({ bg: colors.background })` at
+  module level → always uses the module-level `colors` import (light mode).
+- EVEN WITH: `const colors = useThemeColors()` inside the component — the
+  StyleSheet already evaluated at module load with the static import.
+- FIX: Wrap in a function + useMemo:
+    function createStyles(c) { return StyleSheet.create({ bg: c.background }); }
+    export default function Comp() {
+      const colors = useThemeColors();
+      const styles = useMemo(() => createStyles(colors), [colors]);
+    }
+
+[9.2] Helper components at module level that reference `colors` or `theme`
+    variables also break.
+- Trend, SectionHeader, Pill components were defined outside the main
+  component and referenced the module-level `theme`/`s`.
+- FIX: Move them INSIDE the main component function so they close over the
+  dynamic `theme`/`s` from the component scope.
+
+[9.3] Dashboard used a standalone module-level `const theme = {...}` (always
+    dark) — the component's `const theme = isDark ? darkTheme : lightTheme`
+    only affected JSX inline styles, not the StyleSheet.
+- FIX: Replace module-level `const theme = {...}` with `const lightTheme = {...}`,
+  then use `isDark ? darkTheme : lightTheme` inside the component, and pass the
+  result to a dynamic `createStyles(theme)` call.
+
+[9.4] Import duality — static import vs useThemeColors hook.
+- Static `colors` from `theme.js` → light defaults (safe for StyleSheet fallback).
+- `useThemeColors()` → dynamic colors based on toggled mode.
+- After fixing, remove the static `colors` import entirely once all styles are
+  dynamic. But keep other static imports like `typography`, `shadow`, `radius`.
+
+[9.5] All 32 files that needed conversion:
+- 15 app/ screens (tabs, forms, detail pages)
+- 2 dashboards (index.js, experimental.js)
+- 14 src/components/ (ui/ components + shared components)
+- 1 root layout (_layout.js)
+- Pattern: remove `colors` from static theme import, add useThemeColors(),
+  move StyleSheet.create into createStyles(colors) function, use useMemo.
+
+[9.6] ThemeProvider must wrap all consumers.
+- RootLayout calls useThemeColors() → needs ThemeProvider above it.
+- FIX: Move ThemeProvider OUTSIDE SafeAreaProvider in RootLayout:
+    <ThemeProvider>
+      <SafeAreaProvider>
+        <RootLayoutInner />
+      </SafeAreaProvider>
+    </ThemeProvider>
+
+────────────────────────────────────────────────────────────────────────────
+10. CHECKLIST TOGGLE (Optimistic State + Error Handling)
+────────────────────────────────────────────────────────────────────────────
+
+[10.1] `mutating` flag causes dull flash on every toggle
+- DataContext's `mutating` dims ALL elements via `disabled` prop on DailyChecklist.
+- A single toggle runs two mutations (updatePatient + createTimelineEvent),
+  causing mutating to flash on→off→on→off — double dull flash.
+- FIX: Remove `disabled` from DailyChecklist. Optimistic state provides
+  enough feedback via the icon swap (Circle → CheckCircle2).
+
+[10.2] Stale closure on rapid toggles
+- Using `patient.dailyChecklist` (from parent) as the base for the merge:
+  `const updated = { ...patient.dailyChecklist, [key]: value }`
+- If user toggles item A, then quickly toggles item B before React re-renders,
+  both closures capture the SAME `patient.dailyChecklist` (without A's change).
+- B's toggle overwrites A's change.
+- FIX: Use `localChecklist` (from useState inside the component) as the base:
+  `const prev = { ...(localChecklist || initialChecklist || {}) }`.
+  Since `localChecklist` updates synchronously via `setState`, the next toggle
+  always includes the previous toggle.
+
+[10.3] Timeline event failure reverts the checklist
+- `handleChecklistToggle` awaited `createTimelineEvent` AFTER a successful PATCH.
+- If `createTimelineEvent` threw (FK constraint, missing field, etc.),
+  the error propagated to `handlePress`'s catch block, which called
+  `setLocalChecklist(prev)` — reverting the optimistic state.
+- The data WAS saved (PATCH succeeded), but the UI showed the OLD state.
+- FIX: Wrap `createTimelineEvent` in its own try/catch so its failure doesn't
+  propagate. The PATCH is the source of truth; the timeline event is secondary.
+
+[10.4] Double onPress from TouchableOpacity on web
+- React Native Web can fire `onPress` twice per single click (touch + mouse).
+- If `handlePress` runs twice, the second call flips the toggle back.
+- FIX: Add `pendingRef` guard that blocks concurrent invocations.
+
+[10.5] Checklist component architecture
+- EARLY APPROACH: State in parent (PatientDetailScreen), reset via useEffect
+  on `patient?.id`. Buggy — stale closures + effect could fire unexpectedly.
+- LATER APPROACH: State inside DailyChecklist component, reset via useEffect
+  on `patientId` prop + `prevPatientIdRef`. Clean — state stays with the
+  component that renders the checkboxes.
+- KEY INSIGHT: Even with the component approach, `localChecklist` always
+  takes precedence over `initialChecklist` (from server). This means refetches
+  never disturb the user's toggles — intentional and correct.
+
+[10.6] Key lesson: secondary mutations must not revert primary state
+- PATCH daily_checklist = primary (source of truth)
+- POST timeline_event = secondary (logging)
+- A secondary failure should not revert a primary success.
+- Pattern: wrap secondary mutations in try/catch, log the error, continue.
+
+────────────────────────────────────────────────────────────────────────────
+11. FORM CREATION & NAVIGATION PATTERNS
+────────────────────────────────────────────────────────────────────────────
+
+[11.1] Never pre-fill drug/dose/route on creation forms
+- Antibiotic form had `drug: 'Meropenem', dose: '1 g', route: 'IV', frequency: '8 hourly'`
+  as default values. Users submitting without editing would create incorrect records.
+- FIX: Defaults to `''` (empty string). User must consciously fill each field.
+
+[11.2] After creating a linked entity, navigate to the detail page, not back
+- Creating an antibiotic/investigation with `patientId` should go to the patient's
+  detail page (where the new entity appears in context), not `router.back()`
+  (which could go to dashboard — showing no context).
+- FIX: Check `form.patientId` after creation, `router.replace(/patients/${id})` if set.
+
+[11.3] Mutation handler accepts full state from child, not from parent
+- DailyChecklist manages its own optimistic state. When calling `onToggle`, it
+  passes the COMPLETE merged checklist (not just the toggled key).
+- The parent's handler (`handleChecklistToggle`) receives the full state and
+  sends it directly to the API — no need to merge with parent's `patient.dailyChecklist`.
+- This avoids the stale-closure bug entirely: the child always has the latest state.
+
+────────────────────────────────────────────────────────────────────────────
+12. REACT STATE RESET PATTERNS
+────────────────────────────────────────────────────────────────────────────
+
+[12.1] useRef() initializer is synchronous
+- `const prevIdRef = useRef(patientId)` evaluates `patientId` during the FIRST render,
+  so `prevIdRef.current` is set before any effect runs.
+- This means the effect's guard `if (prevIdRef.current !== patientId)` is false
+  on mount, preventing an unnecessary initial reset.
+
+[12.2] Reset state only when the identity prop changes, not the data prop
+- WRONG: `useEffect(() => { setState(initialData); }, [initialData]);` →
+  Every refetch (which changes `initialData`) resets the state, undoing optimistic updates.
+- FIX: `useEffect(() => { setState({ ...initialData }); }, [patientId]);` +
+  ref guard (`prevPatientIdRef`) to only reset when navigating to a different entity.
+- The data prop (`initialChecklist`) changes on every refetch; the identity prop
+  (`patientId`) only changes when the user navigates.
+
+[12.3] Module-level StyleSheet.create() misleads with dynamic themes
+- Already covered in §9.1. Same mistake repackaged: StyleSheet.create() at
+  module level evaluates once at module load. Even with `useThemeColors()` inside
+  the component, the StyleSheet object is already frozen with the static defaults.
+- FIX: Always wrap StyleSheet.create in a function: `function createStyles(c) { ... }`,
+  call it inside the component with `useMemo(() => createStyles(colors), [colors])`.
+
+────────────────────────────────────────────────────────────────────────────
+13. ASYNC ERROR BOUNDARIES
+────────────────────────────────────────────────────────────────────────────
+
+[13.1] wrapMutation uses try/finally, not try/catch
+- `wrapMutation` in DataContext uses `try { ... } finally { setIsMutating(false) }`.
+  Errors PROPAGATE out of wrapMutation — they are NOT swallowed.
+- This means unhandled errors in mutation handlers bubble up to the caller.
+- If the caller doesn't catch, React logs an unhandled rejection.
+- DESIGN: `wrapMutation` only manages the `mutating` flag. Error handling is
+  the caller's responsibility.
+
+[13.2] Fire-and-forget refetch can outlive the component
+- `triggerRefetch()` calls `refetchAll().catch(() => {})` — not awaited.
+- `refetchAll` calls `setData(...)` and `setLoading(...)` even if the component
+  that triggered the mutation has unmounted.
+- This is safe because React's `setState` on unmounted components is a no-op
+  (React 18+). But the API call still fires, wasting bandwidth.
+- For unmount safety: the `.catch(() => {})` silences the "setState on unmounted"
+  warning in older React versions.
+
+────────────────────────────────────────────────────────────────────────────
+14. PHASE II — MASTER REFERENCES & CULTURES MODULE
+────────────────────────────────────────────────────────────────────────────
+
+[14.1] Master reference tables went through 3 iterations
+- v1 (migration 007): Separate reference tables (culture_master, organism_master,
+  device_master, etc.) with 200+ seed rows. Complex but disconnected.
+- v2 (migration 010): Comprehensive "catalog" system with 20 cross-referenced
+  tables (dx_antibiotic_mapping, abx_culture_mapping, etc.). Over-engineered.
+- v3 (migration 011): Simplified independent master tables (antibiotic_master,
+  culture_master, device_master, investigation_master, route_master). 100+ rows
+  each, no cross-references. Read-only endpoints. This is the final version.
+- Lesson: Start simple. The catalog system was premature — clinicians want
+  picklists, not auto-linking rules.
+
+[14.2] Migration 010/011 roll-forward pattern
+- Migration 010 dropped 007/008 tables and created 20 catalog tables.
+- Migration 011 dropped all 010 tables and created 5 simple master tables.
+- This is fine for dev but would be a production nightmare.
+- Lesson: Write migration 011 as a standalone from the start, skip 007-010.
+
+[14.3] Read-only master endpoints don't need the repository pattern
+- Master reference modules use direct `supabase.from(table).select('*')` instead
+  of `createRepository()` + `buildRepoRoutes()`.
+- They only expose `GET /` (list) and `GET /categories` (grouped categories).
+- No inserts, updates, or deletes via API — managed via SQL migrations.
+
+[14.4] Cultures module has nested resource endpoints
+- `GET /api/cultures/:id/full` — culture with organisms + sensitivities
+- `POST /api/cultures/:id/organisms` — add organism to culture
+- `POST /api/cultures/organisms/:organismId/sensitivities` — add sensitivity
+- This is the only module with >2 levels of nesting. Route file handles the
+  join logic manually (no repository helper).
+
+────────────────────────────────────────────────────────────────────────────
+15. PHASE II — INLINE EDIT PATTERN
+────────────────────────────────────────────────────────────────────────────
+
+[15.1] Edit mode uses local state, not direct API calls
+- Antibiotic/Investigation detail pages have an "Edit" button that toggles
+  `editing` state. In edit mode, TextInputs replace Text elements.
+- Save sends a single PATCH with all changed fields, then creates a timeline
+  event (`antibiotic_updated` / `investigation_updated`).
+- Cancel reverts local state to original values.
+- Button disabled during mutation (mutating flag from DataContext).
+
+[15.2] Edit diff for timeline events
+- `timeline.service.js` has `buildEditDiff()` that compares before/after objects
+  and produces a human-readable diff string (e.g., "Dose: 1g → 500mg, Route: IV → IM").
+- This diff is stored in the timeline event's `description` and `old_value`/`new_value`.
+
+────────────────────────────────────────────────────────────────────────────
+16. PHASE II — CHECKLIST OPTIMISTIC STATE (refined)
+────────────────────────────────────────────────────────────────────────────
+
+[16.1] Local state + ref guard prevents stale data
+- State lives inside `DailyChecklist` component.
+- `prevPatientIdRef` (useRef) ensures state only resets when navigating to a
+  different patient, not on data refetches.
+- `localChecklist` is the single source of truth for UI — server data is only
+  used on initial render (when `localChecklist === null`).
+
+[16.2] Secondary mutation wrapping
+- Primary (PATCH daily_checklist) and secondary (POST timeline_event) are
+  independent — secondary failure never reverts primary success.
+- Pattern:
+    try { await updatePatient(id, { daily_checklist }); } catch { revert; throw; }
+    try { await createTimelineEvent(...); } catch { /* log, don't revert */ }
+
+────────────────────────────────────────────────────────────────────────────
+17. PHASE II — ACTIVITY FEED
+────────────────────────────────────────────────────────────────────────────
+
+[17.1] Timeline events need enrichment columns
+- Migration 013 added `performed_by_name`, `old_value`, `new_value`, `description`
+  to `timeline_events` table.
+- Without these, the activity feed would need N+1 queries to resolve names.
+- The backend timeline event creation now includes `performed_by: user.id` and
+  auto-injects `performed_by_name` from the user context.
+
+[17.2] Activity feed filters out routine events
+- Events like `ventilatorReviewed`, `nutrition`, `dvtProphylaxis` are excluded
+  from the global feed to reduce noise.
+- Only "meaningful" events appear: admissions, starts/stops, inserts/removals,
+  reviews, updates, checklist changes.
+
+────────────────────────────────────────────────────────────────────────────
+18. THEME SYSTEM (Dark Mode)
+────────────────────────────────────────────────────────────────────────────
+
+[18.1] 32 files converted to dynamic theme
+- Pattern: remove static `colors` import, add `useThemeColors()`, move
+  `StyleSheet.create()` into `createStyles(colors)` function, wrap in `useMemo`.
+- ThemeProvider must wrap all consumers (above SafeAreaProvider in root layout).
+- Helper components must be inside the main component function to close over
+  dynamic theme variables.
+
+[18.2] StyleSheet.create() at module level is static
+- Even with `useThemeColors()` inside the component, a module-level
+  StyleSheet.create() evaluates once with the static import.
+- Always wrap in a function: `function createStyles(c) { return StyleSheet.create(...) }`

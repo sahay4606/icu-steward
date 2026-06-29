@@ -1,7 +1,11 @@
+import { useMemo } from 'react';
 import { Text, View, StyleSheet } from 'react-native';
-import { colors, typography } from '../../theme';
+import { typography } from '../../theme';
+import { useThemeColors } from '../../contexts/ThemeContext';
 
 export function Pill({ label, tone = 'gray' }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={[styles.pill, styles[`pill_${tone}`]]}>
       <Text style={[styles.pillText, styles[`pillText_${tone}`]]}>{label}</Text>
@@ -9,7 +13,8 @@ export function Pill({ label, tone = 'gray' }) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) {
+  return StyleSheet.create({
   pill: {
     minHeight: 28,
     paddingHorizontal: 10,
@@ -34,3 +39,4 @@ const styles = StyleSheet.create({
   pillText_orange: { color: colors.status.warning },
   pillText_red: { color: colors.status.critical },
 });
+}

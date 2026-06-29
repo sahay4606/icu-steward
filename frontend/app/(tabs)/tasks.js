@@ -4,18 +4,29 @@ import { useMemo, useState } from 'react';
 import { ScrollView, Text, View, TouchableOpacity, StyleSheet } from 'react-native';
 
 import { SectionHeader, Surface, Pill, ToggleChip, SearchField } from '../../src/components/ui';
-import { colors, typography } from '../../src/theme';
+import { typography } from '../../src/theme';
+import { useThemeColors } from '../../src/contexts/ThemeContext';
 import { useData } from '../../src/contexts/DataContext';
+import { useAuth } from '../../src/contexts/AuthContext';
 import { formatDateTime } from '../../src/lib/format';
 
 export default function TasksScreen() {
   const { tasks, error } = useData();
+  const { user } = useAuth();
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('All');
+  const [scope, setScope] = useState('mine');
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const visible = useMemo(() => {
+    const myName = (user?.name || '').toLowerCase();
     const lower = query.trim().toLowerCase();
     return tasks.filter((task) => {
+      if (scope === 'mine' && myName) {
+        const assigned = (task.assignedTo || task.assigned_to || '').toLowerCase();
+        if (!assigned.includes(myName)) return false;
+      }
       const matchesStatus = status === 'All' || task.status === status;
       const matchesQuery =
         !lower ||
@@ -25,7 +36,7 @@ export default function TasksScreen() {
           .includes(lower);
       return matchesStatus && matchesQuery;
     });
-  }, [tasks, status, query]);
+  }, [tasks, status, query, scope, user]);
 
   if (error && tasks.length === 0) {
     return (
@@ -54,6 +65,17 @@ export default function TasksScreen() {
           testId="tasks-search"
         />
         <View style={{ height: 12 }} />
+        <View style={styles.scopeRow}>
+          {['mine', 'all'].map((s) => (
+            <ToggleChip
+              key={s}
+              label={s === 'mine' ? 'My Tasks' : 'All Tasks'}
+              selected={scope === s}
+              onPress={() => setScope(s)}
+              testId={`tasks-scope-${s}`}
+            />
+          ))}
+        </View>
         <View style={styles.filterRow}>
           {['All', 'Pending', 'Completed'].map((item) => (
             <ToggleChip
@@ -108,7 +130,7 @@ export default function TasksScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) { return StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
@@ -119,6 +141,11 @@ const styles = StyleSheet.create({
   },
   panel: {
     padding: 14,
+  },
+  scopeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
   },
   filterRow: {
     flexDirection: 'row',
@@ -183,4 +210,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.text.primary,
   },
-});
+}); }

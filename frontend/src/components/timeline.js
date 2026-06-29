@@ -1,11 +1,15 @@
+import { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { CircleDot, GitCommitHorizontal } from 'lucide-react-native';
 
-import { colors, radius, spacing, typography } from '../theme';
+import { radius, spacing, typography } from '../theme';
+import { useThemeColors } from '../contexts/ThemeContext';
 import { formatDateTime } from '../lib/format';
 import { Pill } from './ui';
 
 export function Timeline({ items = [] }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={styles.wrapper}>
       {items.map((item, index) => (
@@ -32,7 +36,8 @@ export function Timeline({ items = [] }) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) {
+  return StyleSheet.create({
   wrapper: {
     gap: spacing.sm,
   },
@@ -87,3 +92,4 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 });
+}

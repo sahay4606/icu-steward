@@ -66,7 +66,7 @@ Runtime notes:
 - Backend is ESM (`"type": "module"`) — install separately with `cd backend && yarn install`.
 - REST API server at `backend/src/index.js` (Express, port 4000). Start with `cd backend && yarn start`.
 - Run `backend/supabase/master.sql` in Supabase SQL Editor — creates all tables + seed data in one shot.
-- Then run migrations in order: `001_add_auth_columns.sql`, `002_add_drarushi_user.sql`.
+- Then run all migrations in order: `001` through `013` (see AGENTS.md or master.md for full list).
 - No test framework configured; verify manually with `node --check backend/src/index.js`.
 
 Key issues fixed (web-specific):

@@ -18,6 +18,12 @@ import { createHospitalsRoutes } from './modules/hospitals/hospitals.routes.js';
 import { createTimelineEventsRoutes } from './modules/timeline-events/timeline-events.routes.js';
 import { createReminderRulesRoutes } from './modules/reminder-rules/reminder-rules.routes.js';
 import { createDailyChecklistsRoutes } from './modules/daily-checklists/daily-checklists.routes.js';
+import { createAntibioticMasterRoutes } from './modules/antibiotic-master/antibiotic-master.routes.js';
+import { createCulturesRoutes } from './modules/cultures/cultures.routes.js';
+import { createCultureMasterRoutes } from './modules/culture-master/culture-master.routes.js';
+import { createRouteMasterRoutes } from './modules/route-master/route-master.routes.js';
+import { createInvestigationMasterRoutes } from './modules/investigation-master/investigation-master.routes.js';
+import { createDeviceMasterRoutes } from './modules/device-master/device-master.routes.js';
 
 export function createApp() {
   const app = express();
@@ -48,8 +54,13 @@ export function createApp() {
   app.use('/api/timeline-events', createTimelineEventsRoutes(repositories.timelineEvents));
   app.use('/api/reminder-rules', createReminderRulesRoutes(repositories.reminderRules));
   app.use('/api/daily-checklists', createDailyChecklistsRoutes(repositories.dailyChecklists));
+  app.use('/api/cultures', createCulturesRoutes(repositories));
+  app.use('/api/antibiotic-master', createAntibioticMasterRoutes(supabase));
+  app.use('/api/culture-master', createCultureMasterRoutes(supabase));
+  app.use('/api/route-master', createRouteMasterRoutes(supabase));
+  app.use('/api/investigation-master', createInvestigationMasterRoutes(supabase));
+  app.use('/api/device-master', createDeviceMasterRoutes(supabase));
 
   app.use(errorHandler);
-
   return { app, supabase, backend };
 }

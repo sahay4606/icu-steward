@@ -1,0 +1,1433 @@
+For an ICU stewardship platform, I recommend one master table containing the generic antibiotic names (not brands). Below is an extended antibacterial master list (~100 agents) that is suitable for seeding an antibiotic_master table. These are organized by class so you can later add columns such as class, route, is_core_icu, aware_category, and restricted.
+
+Class	Antibiotics
+Natural Penicillins	Penicillin G, Penicillin V, Benzathine Penicillin G, Procaine Penicillin G
+Aminopenicillins	Ampicillin, Amoxicillin, Bacampicillin
+Anti-staphylococcal Penicillins	Oxacillin, Cloxacillin, Dicloxacillin, Flucloxacillin, Nafcillin
+Extended-spectrum Penicillins	Piperacillin, Ticarcillin, Mezlocillin, Azlocillin
+β-lactam/β-lactamase Inhibitors	Amoxicillin-Clavulanate, Ampicillin-Sulbactam, Piperacillin-Tazobactam, Ticarcillin-Clavulanate, Cefoperazone-Sulbactam
+1st Generation Cephalosporins	Cefazolin, Cephalexin, Cefadroxil, Cephradine
+2nd Generation Cephalosporins	Cefuroxime, Cefaclor, Cefprozil, Cefoxitin, Cefotetan, Loracarbef
+3rd Generation Cephalosporins	Ceftriaxone, Cefotaxime, Ceftazidime, Cefixime, Cefpodoxime, Cefdinir, Cefditoren, Cefoperazone, Ceftibuten
+4th Generation Cephalosporins	Cefepime, Cefpirome
+5th Generation Cephalosporins	Ceftaroline, Ceftobiprole
+Carbapenems	Meropenem, Imipenem-Cilastatin, Ertapenem, Doripenem
+Monobactams	Aztreonam
+Glycopeptides	Vancomycin, Teicoplanin
+Lipoglycopeptides	Dalbavancin, Oritavancin, Telavancin
+Oxazolidinones	Linezolid, Tedizolid
+Lipopeptides	Daptomycin
+Aminoglycosides	Gentamicin, Amikacin, Tobramycin, Netilmicin, Streptomycin, Kanamycin, Neomycin, Paromomycin, Plazomicin
+Fluoroquinolones	Ciprofloxacin, Levofloxacin, Moxifloxacin, Ofloxacin, Norfloxacin, Delafloxacin, Gemifloxacin, Lomefloxacin
+Macrolides	Azithromycin, Clarithromycin, Erythromycin, Roxithromycin, Spiramycin
+Tetracyclines	Doxycycline, Minocycline, Tetracycline, Demeclocycline, Sarecycline
+Glycylcycline / New Tetracyclines	Tigecycline, Eravacycline, Omadacycline
+Lincosamides	Clindamycin, Lincomycin
+Nitroimidazoles	Metronidazole, Tinidazole, Ornidazole, Secnidazole
+Sulfonamides	Trimethoprim-Sulfamethoxazole, Sulfadiazine, Sulfisoxazole
+Nitrofurans	Nitrofurantoin, Furazolidone
+Phosphonic Acid Derivatives	Fosfomycin
+Polymyxins	Colistin (Colistimethate Sodium), Polymyxin B
+Rifamycins	Rifampin (Rifampicin), Rifabutin, Rifapentine
+Amphenicols	Chloramphenicol
+Streptogramins	Quinupristin-Dalfopristin
+Pleuromutilins	Lefamulin
+Urinary Antibiotics	Methenamine Hippurate
+Drugs for Clostridioides difficile	Fidaxomicin
+New β-lactam/β-lactamase Inhibitor Combinations	Ceftazidime-Avibactam, Ceftolozane-Tazobactam, Meropenem-Vaborbactam, Imipenem-Cilastatin-Relebactam
+Siderophore Cephalosporin	Cefiderocol
+Other Specialized Agents	Temocillin, Spectinomycin
+
+Suggested SQL schema
+
+CREATE TABLE antibiotic_master (
+    id UUID PRIMARY KEY,
+    generic_name VARCHAR(150) NOT NULL,
+    antibiotic_class VARCHAR(100) NOT NULL,
+    subclass VARCHAR(100),
+    route VARCHAR(50),
+    is_core_icu BOOLEAN DEFAULT FALSE,
+    aware_category VARCHAR(20),
+    restricted BOOLEAN DEFAULT FALSE,
+    active BOOLEAN DEFAULT TRUE
+);
+
+This list gives you a strong foundation for an ICU antimicrobial database. You can later add columns for coverage (MRSA, ESBL, Pseudomonas, anaerobes, etc.), linked cultures, renal dose adjustment, and stewardship rules without changing the master list.
+
+
+--------
+
+
+
+Below is a comprehensive culture_master reference list suitable for an ICU/Hospital EMR. It combines the specimen sources commonly supported by hospital microbiology laboratories and can be used as the seed data for your SQL database.  
+
+⸻
+
+Blood Cultures
+
+Blood Culture
+Peripheral Blood Culture
+Central Line Blood Culture
+Arterial Line Blood Culture
+PICC Line Blood Culture
+Port Blood Culture
+Pediatric Blood Culture
+Fungal Blood Culture
+Mycobacterial Blood Culture
+
+⸻
+
+Urine Cultures
+
+Urine Culture
+Midstream Urine Culture (MSU)
+Catheter Urine Culture
+Foley Catheter Urine Culture
+Suprapubic Aspirate Culture
+Nephrostomy Urine Culture
+Ureteric Urine Culture
+
+⸻
+
+Respiratory Cultures
+
+Sputum Culture
+Induced Sputum Culture
+Endotracheal Aspirate (ETA)
+Tracheal Aspirate
+Bronchoalveolar Lavage (BAL)
+Bronchial Wash
+Protected Specimen Brush (PSB)
+Nasopharyngeal Aspirate Culture
+Respiratory Viral Culture
+
+⸻
+
+CSF & CNS
+
+CSF Culture
+Ventricular CSF Culture
+Brain Abscess Culture
+
+⸻
+
+Sterile Body Fluid Cultures
+
+Pleural Fluid Culture
+Pericardial Fluid Culture
+Ascitic Fluid Culture
+Peritoneal Fluid Culture
+Synovial Fluid Culture
+Peritoneal Dialysis Fluid Culture
+
+⸻
+
+Wound & Soft Tissue
+
+Wound Swab Culture
+Deep Wound Culture
+Superficial Wound Culture
+Surgical Site Culture
+Pus Culture
+Abscess Culture
+Deep Tissue Culture
+Soft Tissue Culture
+Necrotizing Fasciitis Tissue Culture
+Burn Wound Culture
+
+⸻
+
+Bone & Joint
+
+Bone Culture
+Bone Marrow Culture
+Joint Fluid Culture
+Orthopedic Implant Culture
+Prosthetic Joint Culture
+
+⸻
+
+Device-Related Cultures
+
+Catheter Tip Culture
+Central Venous Catheter Tip Culture
+PICC Tip Culture
+Dialysis Catheter Tip Culture
+Chest Drain Tip Culture
+Drain Fluid Culture
+Drain Tip Culture
+ET Tube Tip Culture
+Tracheostomy Tube Culture
+
+⸻
+
+Gastrointestinal
+
+Stool Culture
+Rectal Swab Culture
+Rectal Surveillance Culture
+Enteric Culture
+
+⸻
+
+Hepatobiliary
+
+Bile Culture
+Gallbladder Fluid Culture
+Liver Abscess Culture
+
+⸻
+
+ENT
+
+Throat Swab Culture
+Tonsillar Swab Culture
+Nasal Swab Culture
+Nasopharyngeal Swab Culture
+Sinus Aspirate Culture
+Ear Swab Culture
+Middle Ear Fluid Culture
+
+⸻
+
+Eye
+
+Eye Swab Culture
+Conjunctival Swab Culture
+Corneal Scraping Culture
+Vitreous Fluid Culture
+Aqueous Humor Culture
+
+⸻
+
+Genital
+
+Vaginal Swab Culture
+High Vaginal Swab Culture (HVS)
+Low Vaginal Swab Culture (LVS)
+Endocervical Swab Culture
+Cervical Swab Culture
+Urethral Swab Culture
+Penile Swab Culture
+Genital Lesion Culture
+
+⸻
+
+Skin & Dermatology
+
+Skin Swab Culture
+Skin Scraping Culture
+Hair Culture
+Nail Culture
+
+⸻
+
+Fungal
+
+Fungal Culture
+Yeast Culture
+Dermatophyte Culture
+Candida Culture
+
+⸻
+
+Mycobacteria
+
+AFB Culture
+Mycobacterial Culture
+TB Culture
+NTM Culture
+
+⸻
+
+Anaerobic
+
+Anaerobic Culture
+Anaerobic Tissue Culture
+Anaerobic Fluid Culture
+Anaerobic Wound Culture
+
+⸻
+
+Aerobic
+
+Aerobic Culture
+Aerobic Wound Culture
+Aerobic Tissue Culture
+
+⸻
+
+Viral
+
+Viral Culture
+HSV Culture
+CMV Culture
+Enterovirus Culture
+
+⸻
+
+Surveillance / Infection Control
+
+MRSA Surveillance Culture
+VRE Surveillance Culture
+CRE Surveillance Culture
+ESBL Surveillance Culture
+MDR Surveillance Culture
+ICU Surveillance Culture
+Admission Screening Culture
+
+⸻
+
+Special Cultures
+
+Placental Culture
+Umbilical Cord Culture
+Amniotic Fluid Culture
+Products of Conception Culture
+
+⸻
+
+Miscellaneous
+
+Saliva Culture
+Oral Swab Culture
+Dental Abscess Culture
+Aspirate Culture
+Biopsy Tissue Culture
+Foreign Body Culture
+Implant Culture
+
+⸻
+
+Recommended SQL Seed Structure
+
+id
+culture_name
+category
+specimen_type
+body_site
+is_sterile_site
+supports_sensitivity
+is_surveillance
+department
+active
+
+⸻
+
+Total Master List (Approximate)
+
+Category	Count
+Blood	9
+Urine	7
+Respiratory	9
+CNS	3
+Sterile Body Fluids	6
+Wound & Tissue	9
+Bone & Joint	5
+Device Related	8
+Gastrointestinal	4
+Hepatobiliary	3
+ENT	8
+Eye	5
+Genital	7
+Skin	4
+Fungal	4
+Mycobacteria	4
+Anaerobic	4
+Aerobic	3
+Viral	4
+Surveillance	6
+Special	4
+Miscellaneous	6
+
+Total: ~122 culture types.
+
+This is comprehensive enough for most tertiary-care hospitals and ICU stewardship systems while remaining practical for a normalized culture_master table.
+
+
+------
+
+
+Below is an enterprise-level device_master reference list suitable for an ICU EMR. This is not consumables (gauze, syringes, gloves), but clinical devices that are inserted, attached, or actively used for patient management and therefore belong in an ICU database. It is based on common ICU equipment categories used in critical care.  
+
+⸻
+
+1. Airway Devices
+
+Oropharyngeal Airway (OPA/Guedel)
+Nasopharyngeal Airway (NPA)
+Laryngeal Mask Airway (LMA)
+Endotracheal Tube (ETT)
+Double Lumen Endotracheal Tube
+Tracheostomy Tube
+Speaking Valve
+Tracheostomy Inner Cannula
+Airway Exchange Catheter
+Bronchial Blocker
+
+⸻
+
+2. Oxygen Delivery Devices
+
+Nasal Cannula
+Simple Face Mask
+Venturi Mask
+Non-Rebreather Mask
+Partial Rebreather Mask
+High Flow Nasal Cannula (HFNC)
+Face Tent
+Aerosol Mask
+Tracheostomy Mask
+Oxygen Hood
+
+⸻
+
+3. Mechanical Ventilation
+
+Mechanical Ventilator
+Transport Ventilator
+Home Ventilator
+CPAP Machine
+BiPAP Machine
+HFOV Ventilator
+Jet Ventilator
+Ventilator Circuit
+Humidifier
+Heat Moisture Exchanger (HME)
+HEPA Filter
+ETCO₂ Module
+
+⸻
+
+4. Vascular Access
+
+Peripheral IV Cannula
+Midline Catheter
+Peripherally Inserted Central Catheter (PICC)
+Central Venous Catheter (CVC)
+Triple Lumen Catheter
+Quad Lumen Catheter
+Introducer Sheath
+Pulmonary Artery Catheter (Swan-Ganz)
+Implantable Port
+Chemo Port
+Hemodialysis Catheter
+Temporary Dialysis Catheter
+Permanent Dialysis Catheter
+Arterial Line
+Intraosseous Access Device
+
+⸻
+
+5. Urinary Devices
+
+Foley Catheter
+Three-Way Foley Catheter
+Suprapubic Catheter
+External Urinary Catheter
+Condom Catheter
+Nephrostomy Tube
+Ureteric Stent
+Bladder Irrigation System
+
+⸻
+
+6. Gastrointestinal / Feeding Devices
+
+Nasogastric Tube (NG)
+Orogastric Tube (OG)
+Nasojejunal Tube (NJ)
+PEG Tube
+PEJ Tube
+Jejunostomy Tube
+Feeding Pump
+Rectal Tube
+Fecal Management System
+
+⸻
+
+7. Drainage Devices
+
+Chest Tube
+Intercostal Drain (ICD)
+Pigtail Catheter
+Jackson Pratt Drain
+Hemovac Drain
+Penrose Drain
+Abdominal Drain
+Pelvic Drain
+Subhepatic Drain
+Biliary Drain
+T-Tube
+Nephrostomy Drain
+External Ventricular Drain (EVD)
+Lumbar Drain
+
+⸻
+
+8. Cardiac Devices
+
+Temporary Pacemaker
+Permanent Pacemaker
+ICD (Implantable Cardioverter Defibrillator)
+CRT Device
+Intra-Aortic Balloon Pump (IABP)
+Impella
+ECMO
+LVAD
+RVAD
+
+⸻
+
+9. Renal Support
+
+Hemodialysis Machine
+CRRT Machine
+SLED Machine
+Peritoneal Dialysis Machine
+Hemoperfusion Device
+
+⸻
+
+10. Monitoring Devices
+
+Multiparameter Monitor
+ECG Monitor
+Holter Monitor
+Telemetry Monitor
+Pulse Oximeter
+Capnography Monitor
+Blood Pressure Monitor
+Invasive Blood Pressure Monitor
+CVP Monitor
+ICP Monitor
+BIS Monitor
+Cardiac Output Monitor
+PiCCO Monitor
+FloTrac Monitor
+LiDCO Monitor
+Temperature Probe
+Neuromuscular Monitor
+
+⸻
+
+11. Infusion Devices
+
+Infusion Pump
+Syringe Pump
+PCA Pump
+Insulin Pump
+Pressure Infuser
+Blood Warmer
+Fluid Warmer
+
+⸻
+
+12. Respiratory Support Devices
+
+Nebulizer
+Inline Nebulizer
+Suction Machine
+Portable Suction
+Closed Suction System
+Open Suction Catheter
+Incentive Spirometer
+PEP Device
+
+⸻
+
+13. Neurological Devices
+
+ICP Bolt
+ICP Catheter
+EEG Monitor
+Cerebral Oximeter
+Brain Tissue Oxygen Monitor
+External Ventricular Drain
+
+⸻
+
+14. Obstetric / Pediatric ICU
+
+Infant Warmer
+Incubator
+Phototherapy Unit
+Neonatal CPAP
+Umbilical Venous Catheter
+Umbilical Arterial Catheter
+
+⸻
+
+15. Infection Control Devices
+
+Negative Pressure Wound Therapy (VAC)
+Isolation Hood
+Air Purification Device
+UV Sterilization Device
+
+⸻
+
+16. Diagnostic Bedside Devices
+
+Portable Ultrasound
+Bladder Scanner
+Portable ECG Machine
+Portable X-ray
+TEE Probe
+Bronchoscope
+Video Laryngoscope
+
+⸻
+
+17. Mobility & Support
+
+ICU Bed
+Air Mattress
+Pressure Relief Mattress
+Sequential Compression Device (SCD)
+Patient Lift
+Transfer Board
+Wheelchair
+
+⸻
+
+18. Emergency Devices
+
+Defibrillator
+AED
+Crash Cart
+Resuscitation Cart
+Mechanical CPR Device
+
+⸻
+
+19. Miscellaneous ICU Devices
+
+Blood Glucose Monitor
+Continuous Glucose Monitor (CGM)
+Temperature Management Device
+Cooling Blanket
+Warming Blanket
+
+⸻
+
+Suggested device_category_master
+
+Category
+
+Airway
+
+Oxygen Delivery
+
+Mechanical Ventilation
+
+Vascular Access
+
+Urinary
+
+Gastrointestinal / Feeding
+
+Drainage
+
+Cardiac Support
+
+Renal Support
+
+Monitoring
+
+Infusion
+
+Respiratory Support
+
+Neurology
+
+Pediatric / Neonatal
+
+Infection Control
+
+Diagnostic
+
+Mobility
+
+Emergency
+
+Miscellaneous
+
+⸻
+
+Suggested device_master Schema
+
+id
+device_name
+device_category
+device_subcategory
+device_type
+body_site_applicable
+requires_insertion
+requires_daily_review
+supports_infection_tracking
+bundle_name
+expected_duration_days
+requires_removal_date
+linked_culture
+linked_investigation
+linked_antibiotic
+is_implantable
+is_reusable
+active
+
+This master list contains approximately 110–130 clinically relevant ICU devices, which is an appropriate scope for a tertiary-care ICU EMR. It covers virtually all patient-facing devices that need insertion records, daily review, infection surveillance, maintenance events, or removal tracking.  
+
+
+
+
+-------
+
+
+
+
+Below is an enterprise-grade investigation_master list suitable for an ICU/Hospital EMR. It is organized by specialty and covers routine ICU investigations, advanced diagnostics, microbiology, pathology, imaging, and point-of-care testing. This is a good foundation for a SQL master table.  
+
+⸻
+
+1. Complete Blood Count (Hematology)
+
+Complete Blood Count (CBC)
+Hemoglobin
+Hematocrit
+Red Blood Cell Count (RBC)
+White Blood Cell Count (WBC)
+Platelet Count
+Differential Leukocyte Count
+Neutrophil Count
+Lymphocyte Count
+Monocyte Count
+Eosinophil Count
+Basophil Count
+Reticulocyte Count
+Peripheral Blood Smear
+ESR
+
+⸻
+
+2. Biochemistry
+
+Blood Glucose
+Random Blood Sugar
+Fasting Blood Sugar
+HbA1c
+Serum Urea
+Blood Urea Nitrogen (BUN)
+Serum Creatinine
+eGFR
+Uric Acid
+Serum Sodium
+Serum Potassium
+Serum Chloride
+Serum Calcium
+Ionized Calcium
+Serum Magnesium
+Serum Phosphate
+Serum Osmolality
+Urine Osmolality
+Lactate
+Ammonia
+
+⸻
+
+3. Liver Function Tests (LFT)
+
+Total Bilirubin
+Direct Bilirubin
+Indirect Bilirubin
+AST (SGOT)
+ALT (SGPT)
+ALP
+GGT
+Albumin
+Globulin
+Total Protein
+A/G Ratio
+LDH
+
+⸻
+
+4. Renal / Urine
+
+Urinalysis
+Urine Microscopy
+Urine Protein
+Urine Albumin
+Urine Creatinine
+Urine Sodium
+Urine Potassium
+Urine Chloride
+Urine Urea
+Urine Protein Creatinine Ratio
+Microalbumin
+24 Hour Urine Protein
+Creatinine Clearance
+
+⸻
+
+5. Coagulation
+
+PT
+INR
+aPTT
+Thrombin Time
+Fibrinogen
+D-Dimer
+FDP
+Anti-Xa Level
+
+⸻
+
+6. Infection / Sepsis Markers
+
+CRP
+Procalcitonin
+Ferritin
+IL-6
+ESR
+Blood Culture
+Urine Culture
+Sputum Culture
+ETA Culture
+BAL Culture
+CSF Culture
+Wound Culture
+Fungal Culture
+AFB Culture
+
+⸻
+
+7. Arterial / Venous Blood Gas
+
+ABG
+VBG
+pH
+PaO2
+PaCO2
+HCO3
+Base Excess
+SaO2
+Lactate
+
+⸻
+
+8. Cardiac
+
+Troponin I
+Troponin T
+CK
+CK-MB
+BNP
+NT-proBNP
+Myoglobin
+ECG
+Holter Monitoring
+Telemetry
+Echocardiography
+Stress Echocardiography
+Coronary Angiography
+
+⸻
+
+9. Respiratory
+
+Chest X-Ray
+Portable Chest X-Ray
+Spirometry
+Peak Expiratory Flow
+DLCO
+Bronchoscopy
+BAL
+Pulmonary Function Test
+ETCO2
+
+⸻
+
+10. Endocrine
+
+TSH
+Free T3
+Free T4
+Cortisol
+ACTH
+PTH
+Vitamin D
+Insulin
+C-Peptide
+
+⸻
+
+11. Nutritional
+
+Vitamin B12
+Folate
+Iron
+Ferritin
+TIBC
+Transferrin Saturation
+Zinc
+Copper
+Selenium
+Vitamin A
+Vitamin E
+Vitamin K
+
+⸻
+
+12. Pancreatic
+
+Serum Amylase
+Serum Lipase
+
+⸻
+
+13. Toxicology
+
+Paracetamol Level
+Salicylate Level
+Alcohol Level
+Drug Screen
+Urine Drug Screen
+Heavy Metal Screen
+
+⸻
+
+14. Therapeutic Drug Monitoring
+
+Vancomycin Level
+Gentamicin Level
+Amikacin Level
+Digoxin Level
+Lithium Level
+Phenytoin Level
+Valproate Level
+Tacrolimus Level
+Cyclosporine Level
+
+⸻
+
+15. Immunology / Autoimmune
+
+ANA
+ENA Profile
+ANCA
+dsDNA
+Complement C3
+Complement C4
+Rheumatoid Factor
+Anti-CCP
+Immunoglobulin Profile
+
+⸻
+
+16. Microbiology / Molecular
+
+Gram Stain
+AFB Smear
+Fungal Smear
+KOH Mount
+PCR
+Multiplex PCR
+GeneXpert
+Respiratory Viral Panel
+COVID PCR
+Influenza PCR
+RSV PCR
+
+⸻
+
+17. Serology
+
+HIV
+HBsAg
+Anti-HCV
+HAV IgM
+HEV IgM
+Dengue NS1
+Dengue IgM
+Dengue IgG
+Leptospira
+Scrub Typhus
+Malaria Antigen
+Widal
+VDRL
+TPHA
+
+⸻
+
+18. Imaging
+
+Chest X-Ray
+Abdominal X-Ray
+Pelvis X-Ray
+Skull X-Ray
+Ultrasound Abdomen
+Ultrasound KUB
+FAST Scan
+Echocardiography
+Transesophageal Echo
+CT Brain
+CT Chest
+CT Abdomen
+CT Pelvis
+CTPA
+CT Angiography
+MRI Brain
+MRI Spine
+MRI Abdomen
+MRCP
+PET CT
+Bone Scan
+DEXA Scan
+
+⸻
+
+19. Vascular Imaging
+
+Venous Doppler
+Arterial Doppler
+Carotid Doppler
+Renal Doppler
+Peripheral Doppler
+
+⸻
+
+20. Gastroenterology
+
+Upper GI Endoscopy
+Colonoscopy
+Flexible Sigmoidoscopy
+ERCP
+EUS
+Capsule Endoscopy
+
+⸻
+
+21. Neurology
+
+EEG
+EMG
+Nerve Conduction Study
+Lumbar Puncture
+CSF Analysis
+ICP Monitoring
+
+⸻
+
+22. Obstetric / Gynecology
+
+Pregnancy Test
+β-hCG
+Obstetric Ultrasound
+Fetal Doppler
+
+⸻
+
+23. Pathology
+
+Histopathology
+FNAC
+Biopsy
+Bone Marrow Biopsy
+Bone Marrow Aspiration
+Frozen Section
+
+⸻
+
+24. Point-of-Care (POC)
+
+POC Glucose
+POC Lactate
+POC ABG
+POC Troponin
+POC Electrolytes
+POC Hemoglobin
+
+⸻
+
+25. ICU Monitoring Investigations
+
+Daily CBC
+Daily RFT
+Daily LFT
+Daily Electrolytes
+Fluid Balance
+Urine Output
+CVP Trend
+ICP Trend
+Cardiac Output Monitoring
+Mixed Venous Oxygen Saturation (SvO2)
+ScvO2
+
+⸻
+
+26. Special ICU Scores / Assessments
+
+APACHE II
+SOFA Score
+qSOFA
+NEWS2
+Glasgow Coma Scale (GCS)
+RASS
+CAM-ICU
+Braden Score
+NUTRIC Score
+
+⸻
+
+Suggested SQL Schema
+
+id
+investigation_name
+category
+subcategory
+specimen_type
+department
+is_lab_test
+is_imaging
+is_point_of_care
+requires_fasting
+requires_consent
+supports_trending
+critical_value_supported
+normal_range
+unit
+active
+
+⸻
+
+Recommended Additional Master Tables
+
+Instead of storing everything in one table, enterprise EMRs typically separate investigations into related masters:
+
+Table	Approx. Records
+investigation_master	180–250
+lab_test_master	120–150
+imaging_master	40–60
+microbiology_master	50–80
+pathology_master	20–30
+point_of_care_master	15–25
+score_master	15–30
+
+This modular approach makes it much easier to manage permissions, reporting, order sets, and links between investigations, cultures, devices, and diagnoses while remaining scalable for a hospital EMR.  
+
+
+
+
+-------
+
+
+No. For an ICU/Hospital EMR, there are many clinically relevant routes. IV and Oral are just the two most common.
+
+I recommend creating a route_master table like this:
+
+Route Category	Route
+Enteral	Oral (PO)
+Enteral	Oral via NG Tube
+Enteral	Oral via OG Tube
+Enteral	Oral via PEG Tube
+Enteral	Oral via PEJ Tube
+Enteral	Oral via Jejunostomy Tube
+Enteral	Sublingual (SL)
+Enteral	Buccal
+Enteral	Rectal (PR)
+Parenteral	Intravenous (IV)
+Parenteral	IV Push
+Parenteral	IV Infusion
+Parenteral	Intramuscular (IM)
+Parenteral	Subcutaneous (SC/SQ)
+Parenteral	Intradermal (ID)
+Parenteral	Intraosseous (IO)
+Parenteral	Intrathecal
+Parenteral	Epidural
+Parenteral	Intra-articular
+Parenteral	Intraperitoneal
+Topical	Topical
+Topical	Transdermal Patch
+Topical	Ophthalmic (Eye)
+Topical	Otic (Ear)
+Topical	Nasal
+Topical	Vaginal
+Topical	Urethral
+Respiratory	Inhalation
+Respiratory	Nebulization
+Respiratory	Endotracheal
+Respiratory	Tracheostomy
+
+⸻
+
+Routes you will use for 99% of ICU antibiotics
+
+Route	Examples
+IV Infusion	Piperacillin-Tazobactam, Meropenem, Vancomycin
+IV Push	Some doses of Ceftriaxone, Ampicillin (depends on protocol)
+Oral (PO)	Amoxicillin, Ciprofloxacin, Linezolid
+NG Tube	Same oral drugs for tube-fed patients
+PEG Tube	Long-term enteral therapy
+IM	Ceftriaxone, Gentamicin (selected situations)
+Inhalation/Nebulized	Tobramycin, Colistin (selected patients)
+Intrathecal	Selected CNS infections (rare)
+Topical	Mupirocin, Fusidic acid
+Ophthalmic	Eye antibiotics
+Otic	Ear antibiotics
+
+These routes are recognized medication administration routes in hospital practice.  
+
+Recommendation for your ICU SaaS
+
+Create a separate route_master table:
+
+id
+route_name
+route_code
+route_category
+active
+
+Seed it with 30–35 routes.
+
+Then in your antibiotic_master (or a junction table if a drug has multiple formulations), link each antibiotic to one or more allowed routes. For example:
+
+* Meropenem → IV Infusion
+* Vancomycin → IV Infusion, Oral (for specific gastrointestinal indications)
+* Linezolid → IV Infusion, Oral
+* Ciprofloxacin → IV Infusion, Oral
+* Colistin → IV Infusion, Nebulization
+* Tobramycin → IV Infusion, IM, Nebulization
+
+This design is flexible and matches how hospital medication databases are typically modeled.
+
+
+
+
+-----
+
+Here is a clean MASTER PROMPT you can directly use for your ICU SaaS / EMR build spec.
+
+⸻
+
+🧠 MASTER PROMPT — ICU ORDER ENTRY SYSTEM (NO AUTO-LINKING LOGIC)
+
+SYSTEM GOAL
+
+We are building a clinical order entry system (CPOE-style ICU module) where the interface is designed for maximum clinician freedom and safety, without automatic medical inference or forced relationships.
+
+The system must behave as a neutral structured order composer, not a decision-support engine.
+
+⸻
+
+🗄️ DATABASE DESIGN PRINCIPLE
+
+We will create independent master tables only.
+
+There will be NO hard-coded relationship tables between antibiotics, cultures, investigations, or devices.
+
+All relationships are user-selected at runtime by the doctor.
+
+⸻
+
+📦 CORE TABLE STRUCTURE
+
+We will build separate independent tables:
+
+1. antibiotic_master
+
+* Contains full list of antibiotics
+* Each entry is independent
+* No forced mapping to anything else
+
+2. route_master
+
+* Contains all possible drug routes
+* Examples: IV, Oral, IM, SC, NG, Nebulization, etc.
+
+3. investigation_master
+
+* Contains all lab + imaging + bedside tests
+* Fully independent dropdown list
+
+4. culture_master
+
+* Contains all microbiology culture types
+* Fully searchable multi-select list
+
+5. device_master
+
+* Contains ICU devices (catheters, ventilators, lines, drains, etc.)
+* Fully independent selection list
+
+⸻
+
+💊 ANTIBIOTIC MODULE BEHAVIOR
+
+When a doctor selects an antibiotic:
+
+1. Doctor selects ONE antibiotic from master list
+2. System then shows:
+    * Allowed routes for that antibiotic (from route_master mapping)
+3. Doctor selects:
+    * ONE OR MORE routes
+4. Final selection becomes:
+
+Antibiotic + Route(s)
+
+✔ Example:
+
+* Meropenem → IV Infusion
+* Linezolid → IV + Oral
+
+⸻
+
+⚠️ IMPORTANT RULE
+
+There is:
+
+❌ NO automatic suggestion of:
+
+* cultures
+* investigations
+* devices
+* diagnoses
+
+ONLY manual selection is allowed.
+
+⸻
+
+🔍 CULTURES MODULE
+
+* Doctor can select multiple cultures at once
+* Searchable dropdown / multi-select UI
+
+Examples:
+
+* Blood culture
+* Urine culture
+* BAL
+* ETA
+* CSF
+* Wound culture
+
+✔ No dependency on antibiotic or diagnosis
+
+⸻
+
+🧪 INVESTIGATIONS MODULE
+
+* Fully independent multi-select list
+* Can select multiple investigations together
+
+Examples:
+
+* CBC
+* CRP
+* Procalcitonin
+* ABG
+* LFT
+* RFT
+* Imaging (X-ray, CT, MRI)
+
+✔ No linkage to antibiotic/device
+
+⸻
+
+🏥 DEVICE MODULE
+
+* Doctor can select multiple devices
+* Independent selection only
+
+Examples:
+
+* Foley catheter
+* Central line
+* ET tube
+* Ventilator
+* Arterial line
+
+✔ No automatic linking
+
+⸻
+
+🧠 USER FLOW (IMPORTANT UX RULE)
+
+Step 1: Select Antibiotic
+
+→ choose from large searchable list
+
+Step 2: Select Route(s)
+
+→ allowed routes appear for that antibiotic
+
+Step 3: Optional independent selections
+
+Doctor can optionally add:
+
+* Investigations (multi-select)
+* Cultures (multi-select)
+* Devices (multi-select)
+
+All are optional and independent.
+
+⸻
+
+🚫 PROHIBITED SYSTEM BEHAVIOR
+
+The system must NOT:
+
+* suggest clinical decisions
+* auto-link antibiotics to tests or devices
+* generate inferred recommendations
+* enforce diagnosis-based ordering
+* modify selections automatically
+
+⸻
+
+🧾 DESIGN PHILOSOPHY
+
+This system is:
+
+“A structured clinical order form, not a clinical AI system.”
+
+It ensures:
+
+* maximum clinician autonomy
+* minimal medico-legal risk
+* no controversial suggestions
+* clean audit trail
+* predictable behavior
+
+⸻
+
+🧩 FINAL ARCHITECTURE SUMMARY
+
+Module	Behavior
+Antibiotics	Independent list
+Routes	Selected only after antibiotic
+Cultures	Multi-select independent
+Investigations	Multi-select independent
+Devices	Multi-select independent
+
+⸻
+
+⚡ KEY IMPLEMENTATION RULE
+
+👉 The system only stores what the doctor explicitly selects
+
+NOT:
+
+* inferred relationships
+* AI suggestions
+* hidden mappings
+
+⸻
+
+If you want next step, I can convert this into:
+
+* full SQL schema (production ready)
+* or React UI order screen layout
+* or backend API design for Supabase / Prisma
+
+Just tell.

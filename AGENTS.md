@@ -23,7 +23,8 @@ No tests exist anywhere in the repo. Manual verification only.
 
 - **Entrypoint** `backend/src/index.js` → `backend/src/app.js` (modular, routes as middleware fns). `backend/src/server.js` is a stale monolithic version — do not edit.
 - ESM (`"type": "module"`). All imports must use explicit `.js` extensions.
-- `createApp()` in `app.js` wires 11 entity route modules + 4 special routes (`auth`, `dashboard`, `profile`, `hospital-settings`). Each entity module calls `buildRepoRoutes()` from `middleware/build-repo-routes.js` — **no auth middleware is applied to CRUD endpoints**.
+- `createApp()` in `app.js` wires 11 entity route modules + 5 master reference modules (`antibiotic-master`, `culture-master`, `device-master`, `investigation-master`, `route-master`) + `cultures` (with nested organisms/sensitivities) + 4 special routes (`auth`, `dashboard`, `profile`, `hospital-settings`). Each entity module calls `buildRepoRoutes()` from `middleware/build-repo-routes.js` — **no auth middleware is applied to CRUD endpoints**.
+- Master reference modules are read-only (`GET /`, `GET /categories`) and use direct Supabase queries (no repository pattern).
 - Route modules live in `backend/src/modules/<entity>/<entity>.routes.js`. Domain data access in `backend/src/domain/`. Services in `backend/src/services/`.
 - Repo pattern: `createRepository(client, tableName)` in `db/repository.js` provides `list/getById/insert/update/remove`. All entities carry `hospital_id` for tenant scoping.
 - `.env` (gitignored) template at `.env.example` requires `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `APP_ENV`.
@@ -32,7 +33,7 @@ No tests exist anywhere in the repo. Manual verification only.
 
 - **Expo Router v6** (file-based routes in `frontend/app/`). Entry: `expo-router/entry`.
 - `(tabs)/_layout.js` uses `useState` + `display: none` instead of Expo Router's `Tabs` — avoids full-page reloads on web. Tab screens stay mounted.
-- Dynamic detail routes: `patients/[id].js`, `investigations/[id].js`, `antibiotics/[id].js`. New/create route at `new.js`. Global search at `search.js`.
+- Dynamic detail routes: `patients/[id].js`, `investigations/[id].js`, `antibiotics/[id].js`, `cultures/[id].js`, `devices/[id].js`. New/create route at `new.js`. Global search at `search.js`. Activity feed at `(tabs)/activity.js`.
 - **`DataContext` does not depend on `AuthContext`** — API client created at module level without a token. Data endpoints on backend have no auth guard anyway.
 - API responses use snake_case; frontend normalizes to camelCase via `normalizeKeys()` from `src/lib/format.js`. Use camelCase everywhere in JS.
 - `src/lib/config.js` hardcodes `ACTIVE_HOSPITAL_ID = 'hosp-st-john'` and `ACTIVE_USER_ID = 'u-admin'`. Override API URL via `EXPO_PUBLIC_API_URL` env var (defaults to `https://icu-steward-api.onrender.com`, falls back to `localhost:4000` when `window.location.hostname === 'localhost'`).
@@ -48,6 +49,17 @@ No tests exist anywhere in the repo. Manual verification only.
   1. `00001_create_tables.sql` — schema (if master.sql not run)
   2. `001_add_auth_columns.sql` — adds `email` + `password_hash`
   3. `002_add_drarushi_user.sql` — renames St. John → General Hospital, adds AIIMS + Dr. Arushi
+  4. `003_add_cascade_delete.sql` — ON DELETE CASCADE for patient FK refs
+  5. `004_add_audit_fields.sql` — adds stopped_at/by, removed_by, completed_at/by columns
+  6. `005_add_linked_culture.sql` — adds linked_culture to antibiotics
+  7. `006_create_culture_tables.sql` — cultures, organisms, sensitivities, links
+  8. `007_create_master_reference_tables.sql` — initial master ref tables (deprecated by 010)
+  9. `008_create_antibiotic_master_tables.sql` — initial antibiotic master (deprecated by 010/011)
+  10. `009_create_antibiotic_culture_mapping.sql` — mapping table (deprecated by 010/011)
+  11. `010_create_comprehensive_master_tables.sql` — workbook-derived catalog tables (dropped by 011)
+  12. `011_reform_independent_master_tables.sql` — simplified independent master tables (final)
+  13. `012_add_frequency_alert_fields.sql` — adds frequency_hours/minutes to antibiotics
+  14. `013_add_beds_reminder_timeline_columns.sql` — icu_beds, reminder_at, timeline enrichment columns
 - Backend uses `service_role` key (bypasses RLS — trusted server context).
 
 ## Auth
@@ -87,3 +99,113 @@ Full audit at `PROJECT_TECHNICAL_AUDIT_REPORT.txt` (score 1.5/10). Critical know
 - Passwords as SHA-256
 - CORS `*` in production
 - No input validation, rate limiting, or RLS policies
+
+## Functional Implementation Phase (Supabase as Source of Truth)
+
+Treat Supabase as the single source of truth. Frontend state must stay synchronized with the database after every mutation.
+
+### Core Rule
+Every mutation must:
+1. Validate input
+2. Execute correct Supabase query (PATCH/POST/DELETE via API)
+3. Handle errors gracefully with Alert
+4. Disable button during request (`mutating` flag from DataContext)
+5. Prevent duplicate requests (via disabled + mutating)
+6. Update timeline event
+7. Refetch affected data (`triggerRefetch` runs automatically in createEntity/updateEntity/removeEntity)
+8. Dashboard + patient detail + lists auto-refresh via refetchAll
+
+### Page-Level Requirements
+
+**Antibiotic (Stop)** — `antibiotics/[id].js`
+- Send: `{ action: 'Stop', status: 'Stopped', stopped_at: ISO, stopped_by: currentUserId }`
+- Create timeline event: type `antibiotic_stopped`
+- Dashboard filter excludes action !== 'Review due' && action !== 'Escalate'
+- Refetch removes from active list automatically
+
+**Antibiotic (Continue)** — `antibiotics/[id].js`
+- Send: `{ action: 'Continue', day: N+1, review_date: now+3d ISO, status: 'Active' }`
+- Create timeline event: type `antibiotic_continued`
+
+**Investigation (Mark Reviewed)** — `investigations/[id].js`
+- Send: `{ status: 'Reviewed', completed_at: ISO, completed_by: currentUserId }`
+- Create timeline event: type `investigation_reviewed`
+
+**Device (Remove)** — `patients/[id].js`
+- Send: `{ status: 'Removed', removal_date: date, removed_by: currentUserId }`
+- Create timeline event: type `device_removed`
+
+**Patient (Delete)** — `patients/[id].js`
+- Calls `deletePatient` → DELETE via API to `/api/patients/{id}`
+- Requires migration `003_add_cascade_delete.sql` to be run for FK cascade
+- Must show confirm dialog (uses `confirm()` from lib)
+- Success alert + router.back()
+
+**Patient (Clinical Note, Checklist, Add Device)** — `patients/[id].js`
+- Uses existing `updatePatient` + `createTimelineEvent` pattern
+
+### DataContext (`DataContext.js`)
+- `mutating` boolean — true while any mutation is in flight (prevents duplicate clicks)
+- `currentUserId` — from `useAuth().user.id`
+- `currentUserName` — from `useAuth().user.name`
+- `refetchAll` now refetches: patients, investigations, antibiotics, devices, tasks, notifications, timelineEvents (first 3 patients), dashboardSummary
+- `createTimelineEvent` auto-injects `performed_by: user?.id`
+
+### Dashboard (`(tabs)/index.js`)
+- Review tab filters antibiotics by `action === 'Review due' || action === 'Escalate'`
+- Stopped antibiotics no longer appear
+- KPI counts auto-refresh via dashboardSummary refetch in refetchAll
+
+### Migrations Required
+| File | Purpose |
+|------|---------|
+| `003_add_cascade_delete.sql` | ON DELETE CASCADE for patient FK references |
+| `004_add_audit_fields.sql` | Add stopped_at, stopped_by, stop_reason, removed_by, completed_at, completed_by columns |
+
+### Tests
+No automated tests exist. Manual verification in browser.
+- Hard refresh (Cmd+Shift+R) to pick up bundle changes
+- Check browser console for errors
+- Verify Supabase data directly via API or SQL Editor
+
+### Known Limits
+- No toast/snackbar (uses Alert.alert for success/error)
+- No stop_reason prompt (field exists in schema but not wired in UI)
+- `review_due_date` column created but Continue uses existing `review_date`
+- Timeline scoped to first 3 patients for performance
+
+### Phase II Additions
+
+**Back Button** — `src/components/back-button.js`
+- Reusable component with fallback route on web when no history exists
+- Used by: patients, antibiotics, investigations, new, search, settings, hospital-settings
+- Falls back to `/` (dashboard) when `window.history.length <= 1`
+
+**Checklist** — `patients/[id].js` + `src/components/checklist.js`
+- Local state (`localChecklist`) prevents stale-data bug on rapid toggles
+- Resets when navigating to a different patient
+- Optimistic UI update on toggle; rolls back on API error
+- `mutating` prop disables all checkboxes during mutation
+- Each checkbox is fully independent — toggling one never affects others
+
+**Full CRUD**
+
+| Entity | Create | Read | Update | Delete | Timeline |
+|--------|--------|------|--------|--------|----------|
+| Antibiotics | new.js | detail page | inline edit | confirm+delete | antibiotic_updated / _deleted |
+| Investigations | new.js | detail page | inline edit | confirm+delete | investigation_updated / _deleted |
+| Cultures | new.js | detail page | inline edit | confirm+delete | culture_updated / _deleted |
+| Devices | patient detail | patient detail | inline edit | confirm+remove | device_inserted / _removed |
+| Patients | new.js | detail page | checklist/note | confirm+delete | checklist / note |
+
+**Edit** — inline in `antibiotics/[id].js` and `investigations/[id].js`
+- Edit button toggles editable TextInputs, Save/Cancel buttons
+- Creates timeline event with type `_{entity}_updated`
+- Disabled during mutation
+
+**Patient Status** — `new.js` + `(tabs)/index.js`
+- Patient creation form has a status selector: `Stable`, `Under review`, `Requires attention`
+- Dashboard "Immediate Action Required" filters by `status === 'Requires attention'`
+- `Under review` patients route to Today's Reviews when they have pending items
+
+**DataContext additions:** `deleteAntibiotic(id)`, `deleteInvestigation(id)`, `deleteCulture(id)`, `linkCulture(data)`

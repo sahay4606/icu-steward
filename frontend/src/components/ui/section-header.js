@@ -1,14 +1,19 @@
+import React, { useMemo } from 'react';
 import { TouchableOpacity, Text, View, StyleSheet } from 'react-native';
-import { colors, spacing, typography, radius } from '../../theme';
+import { spacing, typography, radius } from '../../theme';
+import { useThemeColors } from '../../contexts/ThemeContext';
 
-export function SectionHeader({ title, subtitle, actionLabel, onAction, actionTestId }) {
+export function SectionHeader({ title, subtitle, actionLabel, onAction, actionTestId, action }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   return (
     <View style={styles.sectionHeader}>
       <View style={{ flex: 1 }}>
         <Text style={styles.sectionTitle}>{title}</Text>
         {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
       </View>
-      {actionLabel && onAction ? (
+      {action || (actionLabel && onAction && (
         <TouchableOpacity
           activeOpacity={0.7}
           onPress={onAction}
@@ -17,44 +22,46 @@ export function SectionHeader({ title, subtitle, actionLabel, onAction, actionTe
         >
           <Text style={styles.sectionActionText}>{actionLabel}</Text>
         </TouchableOpacity>
-      ) : null}
+      ))}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  sectionTitle: {
-    fontFamily: typography.heading,
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.text.primary,
-  },
-  sectionSubtitle: {
-    marginTop: 2,
-    fontFamily: typography.body,
-    fontSize: 13,
-    color: colors.text.secondary,
-  },
-  sectionAction: {
-    minHeight: 44,
-    paddingHorizontal: 12,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sectionActionText: {
-    fontFamily: typography.bodyMedium,
-    fontSize: 13,
-    color: colors.brand.primary,
-    fontWeight: '600',
-  },
-});
+function createStyles(colors) {
+  return StyleSheet.create({
+    sectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: spacing.md,
+    },
+    sectionTitle: {
+      fontFamily: typography.heading,
+      fontSize: 18,
+      fontWeight: '700',
+      color: colors.text.primary,
+    },
+    sectionSubtitle: {
+      marginTop: 2,
+      fontFamily: typography.body,
+      fontSize: 13,
+      color: colors.text.secondary,
+    },
+    sectionAction: {
+      minHeight: 44,
+      paddingHorizontal: 12,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    sectionActionText: {
+      fontFamily: typography.bodyMedium,
+      fontSize: 13,
+      color: colors.brand.primary,
+      fontWeight: '600',
+    },
+  });
+}

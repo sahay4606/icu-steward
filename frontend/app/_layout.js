@@ -1,17 +1,19 @@
 import { Stack, router, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { ActivityIndicator, View, StyleSheet } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { bootstrapStorage } from '../src/utils/storage';
 import { DataProvider } from '../src/contexts/DataContext';
 import { AuthProvider, useAuth } from '../src/contexts/AuthContext';
-import { colors } from '../src/theme';
+import { ThemeProvider } from '../src/contexts/ThemeContext';
+import { useThemeColors } from '../src/contexts/ThemeContext';
 
 function AuthGate({ children }) {
   const { isAuthenticated, loading } = useAuth();
   const segments = useSegments();
+  const colors = useThemeColors();
 
   useEffect(() => {
     if (loading) return;
@@ -24,9 +26,10 @@ function AuthGate({ children }) {
   }, [isAuthenticated, loading, segments]);
 
   if (loading) {
+    const c = colors || { brand: { primary: '#1D4ED8' }, background: '#F4F6F9' };
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={colors.brand.primary} />
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.background }}>
+        <ActivityIndicator size="large" color={c.brand.primary} />
       </View>
     );
   }
@@ -38,36 +41,36 @@ function RootLayoutInner() {
   useEffect(() => { bootstrapStorage(); }, []);
 
   return (
-    <AuthProvider>
-      <DataProvider>
-        <AuthGate>
-          <StatusBar style="dark" />
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="login" />
-            <Stack.Screen name="signup" />
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="patients/[id]" />
-            <Stack.Screen name="investigations/[id]" />
-            <Stack.Screen name="antibiotics/[id]" />
-            <Stack.Screen name="new" />
-            <Stack.Screen name="search" />
-            <Stack.Screen name="settings" />
-            <Stack.Screen name="hospital-settings" />
-          </Stack>
-        </AuthGate>
-      </DataProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <DataProvider>
+          <AuthGate>
+            <StatusBar style="dark" />
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="login" />
+              <Stack.Screen name="signup" />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="patients/[id]" />
+              <Stack.Screen name="investigations/[id]" />
+              <Stack.Screen name="antibiotics/[id]" />
+              <Stack.Screen name="new" />
+              <Stack.Screen name="search" />
+              <Stack.Screen name="settings" />
+              <Stack.Screen name="hospital-settings" />
+            </Stack>
+          </AuthGate>
+        </DataProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 
 export default function RootLayout() {
   return (
-    <SafeAreaProvider>
-      <RootLayoutInner />
-    </SafeAreaProvider>
+    <ThemeProvider>
+      <SafeAreaProvider>
+        <RootLayoutInner />
+      </SafeAreaProvider>
+    </ThemeProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
-});

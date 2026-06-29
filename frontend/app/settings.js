@@ -1,21 +1,23 @@
+import { useMemo } from 'react';
 import { ScrollView, Text, View, TouchableOpacity, StyleSheet } from 'react-native';
-import { ArrowLeft, Bell, MoonStar, ShieldCheck, WifiOff } from 'lucide-react-native';
+import { Bell, MoonStar, ShieldCheck, WifiOff } from 'lucide-react-native';
 import { router } from 'expo-router';
 
 import { SectionHeader, Surface, InfoRow, Pill } from '../src/components/ui';
-import { colors, typography } from '../src/theme';
+import { typography } from '../src/theme';
+import { useThemeColors } from '../src/contexts/ThemeContext';
 import { useAuth } from '../src/contexts/AuthContext';
 import { useData } from '../src/contexts/DataContext';
+import { BackButton } from '../src/components/back-button';
 
 export default function SettingsScreen() {
   const { user } = useAuth();
   const { hospital } = useData();
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <TouchableOpacity activeOpacity={0.7} onPress={() => router.back()} data-testid="settings-back" style={styles.back}>
-        <ArrowLeft color={colors.text.primary} size={18} strokeWidth={2} />
-        <Text style={styles.backText}>Settings</Text>
-      </TouchableOpacity>
+      <BackButton colors={colors} fallback="/" label="Settings" testID="settings-back" />
 
       <SectionHeader title="Personal settings" subtitle="Notification and offline preferences for the signed-in user." />
       <Surface style={styles.panel}>
@@ -66,7 +68,7 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) { return StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
@@ -118,4 +120,4 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.text.secondary,
   },
-});
+}); }

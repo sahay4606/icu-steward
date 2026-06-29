@@ -1,24 +1,29 @@
-import { useState } from 'react';
-import { Bell, LayoutDashboard, ListTodo, UserRound, Users } from 'lucide-react-native';
+import { useState, useMemo } from 'react';
+import {
+  Activity, Grid3X3, ListTodo, UserRound, Users,
+} from 'lucide-react-native';
 import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
 
-import { colors, shadow, typography } from '../../src/theme';
+import { shadow, typography } from '../../src/theme';
+import { useThemeColors } from '../../src/contexts/ThemeContext';
 
 import DashboardScreen from './index';
 import PatientsScreen from './patients';
 import TasksScreen from './tasks';
-import NotificationsScreen from './notifications';
+import ActivityScreen from './activity';
 import ProfileScreen from './profile';
 
 const tabs = [
-  { name: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, component: DashboardScreen },
+  { name: 'dashboard', label: 'Dashboard', icon: Grid3X3, component: DashboardScreen },
   { name: 'patients', label: 'Patients', icon: Users, component: PatientsScreen },
   { name: 'tasks', label: 'Tasks', icon: ListTodo, component: TasksScreen },
-  { name: 'notifications', label: 'Alerts', icon: Bell, component: NotificationsScreen },
+  { name: 'activity', label: 'Activity', icon: Activity, component: ActivityScreen },
   { name: 'profile', label: 'Profile', icon: UserRound, component: ProfileScreen },
 ];
 
 export default function TabsLayout() {
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [activeTab, setActiveTab] = useState('dashboard');
 
   return (
@@ -58,7 +63,7 @@ export default function TabsLayout() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) { return StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
     backgroundColor: colors.surface,
@@ -84,4 +89,4 @@ const styles = StyleSheet.create({
     color: colors.brand.primary,
     fontWeight: '700',
   },
-});
+}); }

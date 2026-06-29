@@ -10,7 +10,8 @@ export function createApiClient(baseUrl = '', token = null) {
       ...init,
     });
     if (!response.ok) {
-      throw new Error(`Request failed: ${response.status}`);
+      const body = await response.text().catch(() => '');
+      throw new Error(`Request failed: ${response.status}${body ? ` - ${body}` : ''}`);
     }
     return response.json();
   }
@@ -30,6 +31,13 @@ export function createApiClient(baseUrl = '', token = null) {
     dailyChecklists: '/api/daily-checklists',
     profile: '/api/profile',
     hospitalSettings: '/api/hospital-settings',
+    cultures: '/api/cultures',
+    antibioticCultureLinks: '/api/antibiotic-culture-links',
+    cultureMaster: '/api/culture-master',
+    routeMaster: '/api/route-master',
+    antibioticMaster: '/api/antibiotic-master',
+    investigationMaster: '/api/investigation-master',
+    deviceMaster: '/api/device-master',
   };
 
   const resolve = (path) => `${baseUrl}${path}`;
@@ -57,8 +65,35 @@ export function createApiClient(baseUrl = '', token = null) {
     getReminderRules: (hospitalId) => request(resolve(`${endpoints.reminderRules}${qs({ hospital_id: hospitalId })}`)),
     getProfile: (userId) => request(resolve(`${endpoints.profile}${qs({ user_id: userId })}`)),
     getHospitalSettings: (hospitalId) => request(resolve(`${endpoints.hospitalSettings}${qs({ hospital_id: hospitalId })}`)),
+    updateHospitalSettings: (hospitalId, body) => request(resolve(`${endpoints.hospitalSettings}${qs({ hospital_id: hospitalId })}`), { method: 'PATCH', body: JSON.stringify(body) }),
+    getCultures: (hospitalId) => request(resolve(`${endpoints.cultures}${qs({ hospital_id: hospitalId })}`)),
+    getCultureFull: (id) => request(resolve(`${endpoints.cultures}/${id}/full`)),
+    getLinkedCultures: (antibioticId) => request(resolve(`${endpoints.antibioticCultureLinks}${qs({ antibiotic_id: antibioticId })}`)),
+    linkCulture: (antibioticId, cultureId, reason, linkedBy) => request(resolve(endpoints.antibioticCultureLinks), { method: 'POST', body: JSON.stringify({ antibiotic_id: antibioticId, culture_id: cultureId, link_reason: reason, linked_by: linkedBy }) }),
+    unlinkCulture: async (linkId) => {
+      const response = await fetch(resolve(`${endpoints.antibioticCultureLinks}/${linkId}`), { method: 'DELETE', headers });
+      if (!response.ok) { const body = await response.text().catch(() => ''); throw new Error(`Request failed: ${response.status}${body ? ` - ${body}` : ''}`); }
+      return response;
+    },
     post: (path, body) => request(resolve(path), { method: 'POST', body: JSON.stringify(body) }),
+    getCultureMaster: () => request(resolve(`${endpoints.cultureMaster}`)),
+    getCultureMasterCategories: () => request(resolve(`${endpoints.cultureMaster}/categories`)),
+    getRouteMaster: () => request(resolve(`${endpoints.routeMaster}`)),
+    getRouteMasterCategories: () => request(resolve(`${endpoints.routeMaster}/categories`)),
+    getAntibioticMaster: () => request(resolve(`${endpoints.antibioticMaster}`)),
+    getInvestigationMaster: () => request(resolve(`${endpoints.investigationMaster}`)),
+    getInvestigationMasterCategories: () => request(resolve(`${endpoints.investigationMaster}/categories`)),
+    getDeviceMaster: () => request(resolve(`${endpoints.deviceMaster}`)),
+    getDeviceMasterCategories: () => request(resolve(`${endpoints.deviceMaster}/categories`)),
     patch: (path, body) => request(resolve(path), { method: 'PATCH', body: JSON.stringify(body) }),
-    delete: (path) => fetch(resolve(path), { method: 'DELETE', headers }),
+    delete: async (path) => {
+      const response = await fetch(resolve(path), { method: 'DELETE', headers });
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new Error(`Request failed: ${response.status}${body ? ` - ${body}` : ''}`);
+      }
+      return response;
+    },
   };
 }
+

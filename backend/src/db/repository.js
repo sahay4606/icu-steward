@@ -46,5 +46,9 @@ export function createDomainRepositories(client) {
     auditLogs: createRepository(client, BACKEND_TABLES.auditLogs),
     sessions: createRepository(client, BACKEND_TABLES.sessions),
     roleAssignments: createRepository(client, BACKEND_TABLES.roleAssignments),
+    cultures: createRepository(client, BACKEND_TABLES.cultures),
+    cultureOrganisms: createRepository(client, BACKEND_TABLES.cultureOrganisms),
+    cultureSensitivities: createRepository(client, BACKEND_TABLES.cultureSensitivities),
+    antibioticCultureLinks: createRepository(client, BACKEND_TABLES.antibioticCultureLinks),
   };
 }

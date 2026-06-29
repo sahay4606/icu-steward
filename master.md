@@ -24,8 +24,19 @@ Data flows: Supabase → REST API (Express, port 4000) → `src/lib/api.js` → 
 - `backend/.env.example` lists the required Supabase + JWT env vars.
 - `backend/supabase/master.sql` — run in Supabase SQL Editor for full schema + seed data (General Hospital + AIIMS).
 - `backend/supabase/migrations/` — run in order:
-  1. `001_add_auth_columns.sql` — add email/password_hash columns (if master.sql was run before auth existed)
+  1. `001_add_auth_columns.sql` — add email/password_hash columns
   2. `002_add_drarushi_user.sql` — rename St. John → General Hospital, add AIIMS hospital + Dr. Arushi user
+  3. `003_add_cascade_delete.sql` — ON DELETE CASCADE for patient FK refs
+  4. `004_add_audit_fields.sql` — stopped_at/by, removed_by, completed_at/by columns
+  5. `005_add_linked_culture.sql` — linked_culture on antibiotics
+  6. `006_create_culture_tables.sql` — cultures, organisms, sensitivities, links
+  7. `007_create_master_reference_tables.sql` — initial master ref tables (deprecated by 010)
+  8. `008_create_antibiotic_master_tables.sql` — initial antibiotic master (deprecated by 010/011)
+  9. `009_create_antibiotic_culture_mapping.sql` — mapping table (deprecated by 010/011)
+  10. `010_create_comprehensive_master_tables.sql` — workbook-derived catalog tables (dropped by 011)
+  11. `011_reform_independent_master_tables.sql` — simplified independent master tables (final)
+  12. `012_add_frequency_alert_fields.sql` — frequency_hours/minutes for antibiotics
+  13. `013_add_beds_reminder_timeline_columns.sql` — icu_beds, reminder_at, timeline enrichment
 
 ## Navigation and Screens
 `frontend/app/_layout.js` is the root shell. It boots storage, installs `SafeAreaProvider`, and registers stack routes.
@@ -42,6 +53,8 @@ The rest of `frontend/app/` is screen-level feature code:
 - `frontend/app/(tabs)/patients.js` is the roster, filtering, and sorting screen.
 - `frontend/app/patients/[id].js` shows patient detail, checklist, devices, antibiotics, investigations, and timeline.
 - `frontend/app/investigations/[id].js` and `frontend/app/antibiotics/[id].js` are detail/action views for stewardship workflows.
+- `frontend/app/cultures/[id].js` and `frontend/app/devices/[id].js` are detail/action views for cultures and devices.
+- `frontend/app/(tabs)/activity.js` is a global activity feed showing all non-routine timeline events.
 - `frontend/app/new.js` is a form factory driven by `?type=patient|investigation|antibiotic|task`.
 - `frontend/app/search.js` is global search across entities.
 - `frontend/app/settings.js` and `frontend/app/hospital-settings.js` separate personal vs tenant-level configuration.
@@ -50,7 +63,7 @@ The rest of `frontend/app/` is screen-level feature code:
 ## Shared UI Layer
 The reusable component system lives in `frontend/src/components/ui/` — individual files with a barrel `index.js` export. Components: `Surface`, `SectionHeader`, `StatCard`, `ActionTile`, `Pill`, `ToggleChip`, `SearchField`, `Field`, `InfoRow`.
 
-Additional components: `DailyChecklist` (`src/components/checklist.js`), `Timeline` (`src/components/timeline.js`).
+Additional components: `DailyChecklist` (`src/components/checklist.js`), `Timeline` (`src/components/timeline.js`), `BackButton` (`src/components/back-button.js`), picker modals for drugs/cultures/devices/investigations/routes, `Dropdown`, `DateField`, `PatientSelector`, `UserSelector`, `CultureLinkModal`, `CultureReferenceModal`.
 
 Most interactive elements include `data-testid`.
 
@@ -85,9 +98,9 @@ Most interactive elements include `data-testid`.
 
 ## Backend Stack (ESM, `"type": "module"`)
 - Entrypoint: `backend/src/index.js` — boots app on port 4000.
-- App factory: `backend/src/app.js` — mounts all route modules.
+- App factory: `backend/src/app.js` — mounts all route modules including 5 master reference modules (read-only, direct Supabase queries).
 - DB layer: `backend/src/db/client.js` (Supabase client), `backend/src/db/repository.js` (generic CRUD), `backend/src/db/backend.js` (factory).
-- Modules: `backend/src/modules/*/` — route files per feature (auth, patients, dashboard, etc.).
+- Modules: `backend/src/modules/*/` — route files per feature (auth, patients, dashboard, etc.). Master reference modules: `antibiotic-master`, `culture-master`, `device-master`, `investigation-master`, `route-master`. Culture module with nested organisms/sensitivities.
 - Middleware: `async-handler.js`, `auth-middleware.js`, `build-repo-routes.js`, `error-handler.js`.
 - JWT: `jsonwebtoken`, `JWT_SECRET` env var (default `icu-steward-dev-secret`).
 - Credentials in `backend/.env` (gitignored). `.env.example` has the template.

@@ -1,15 +1,19 @@
 import { router } from 'expo-router';
-import { Building2, LogOut, Settings2, UserRound } from 'lucide-react-native';
+import { Building2, LayoutDashboard, LogOut, Settings2, UserRound } from 'lucide-react-native';
 import { ScrollView, Text, View, TouchableOpacity, StyleSheet } from 'react-native';
+import { useMemo } from 'react';
 
 import { SectionHeader, Surface, InfoRow, Pill } from '../../src/components/ui';
-import { colors, typography } from '../../src/theme';
+import { typography } from '../../src/theme';
+import { useThemeColors } from '../../src/contexts/ThemeContext';
 import { useData } from '../../src/contexts/DataContext';
 
 import { useAuth } from '../../src/contexts/AuthContext';
 export default function ProfileScreen() {
   const { hospital, users, reminderRules, error } = useData();
   const { user: authUser, logout } = useAuth();
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const demoAnalytics = {
     turnaroundTime: '26 hours',
     avgAntibioticDuration: '5.2 days',
@@ -78,6 +82,18 @@ export default function ProfileScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           activeOpacity={0.7}
+          onPress={() => router.push('/experimental')}
+          data-testid="profile-experimental"
+          style={{ flex: 1 }}
+        >
+          <Surface style={styles.actionCard}>
+            <LayoutDashboard color="#8B5CF6" size={20} strokeWidth={2} />
+            <Text style={styles.actionTitle}>New Dashboard</Text>
+            <Text style={styles.actionSubtitle}>Experimental v2 action center</Text>
+          </Surface>
+        </TouchableOpacity>
+        <TouchableOpacity
+          activeOpacity={0.7}
           onPress={() => router.push('/hospital-settings')}
           data-testid="profile-hospital-settings"
           style={{ flex: 1 }}
@@ -115,7 +131,7 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) { return StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
@@ -204,4 +220,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.status.critical,
   },
-});
+}); }

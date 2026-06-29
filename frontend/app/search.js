@@ -1,14 +1,16 @@
 import { router } from 'expo-router';
-import { ArrowLeft, SearchX, UserRound, FlaskConical, Pill, BedDouble } from 'lucide-react-native';
+import { SearchX, UserRound, FlaskConical, Pill, BedDouble } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { ScrollView, Text, View, TouchableOpacity, StyleSheet } from 'react-native';
 
-import { colors, typography } from '../src/theme';
+import { typography } from '../src/theme';
+import { useThemeColors } from '../src/contexts/ThemeContext';
 import { Surface, SearchField, SectionHeader, ToggleChip, Pill as StatusPill } from '../src/components/ui';
 import { useData } from '../src/contexts/DataContext';
 import { formatDate } from '../src/lib/format';
+import { BackButton } from '../src/components/back-button';
 
-function ResultCard({ icon: Icon, title, subtitle, value, tone, onPress, testId }) {
+function ResultCard({ icon: Icon, title, subtitle, value, tone, onPress, testId, styles }) {
   return (
     <TouchableOpacity activeOpacity={0.7} onPress={onPress} data-testid={testId}>
       <Surface style={styles.resultCard}>
@@ -31,6 +33,8 @@ export default function SearchScreen() {
   const { patients, investigations, antibiotics, users } = useData();
   const [query, setQuery] = useState('');
   const [scope, setScope] = useState('All');
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -51,10 +55,7 @@ export default function SearchScreen() {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <TouchableOpacity activeOpacity={0.7} onPress={() => router.back()} data-testid="search-back" style={styles.back}>
-        <ArrowLeft color={colors.text.primary} size={18} strokeWidth={2} />
-        <Text style={styles.backText}>Search</Text>
-      </TouchableOpacity>
+      <BackButton colors={colors} fallback="/" label="Search" testID="search-back" />
 
       <SectionHeader title="Global search" subtitle="Find anything tied to a hospital_id in two taps." />
       <Surface style={styles.panel}>
@@ -76,7 +77,7 @@ export default function SearchScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Patients</Text>
           {results.patients.map((patient) => (
-            <ResultCard
+<ResultCard styles={styles} 
               key={patient.id}
               icon={BedDouble}
               title={patient.name}
@@ -94,7 +95,7 @@ export default function SearchScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Investigations</Text>
           {results.investigations.map((item) => (
-            <ResultCard
+<ResultCard styles={styles} 
               key={item.id}
               icon={FlaskConical}
               title={item.name}
@@ -112,7 +113,7 @@ export default function SearchScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Antibiotics</Text>
           {results.antibiotics.map((item) => (
-            <ResultCard
+<ResultCard styles={styles} 
               key={item.id}
               icon={Pill}
               title={item.drugName}
@@ -130,7 +131,7 @@ export default function SearchScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Doctors</Text>
           {results.doctors.map((item) => (
-            <ResultCard
+<ResultCard styles={styles} 
               key={item.id}
               icon={UserRound}
               title={item.name}
@@ -157,7 +158,7 @@ export default function SearchScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) { return StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
@@ -226,4 +227,4 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     lineHeight: 17,
   },
-});
+}); }

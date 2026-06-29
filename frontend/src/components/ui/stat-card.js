@@ -1,10 +1,13 @@
+import React, { useMemo } from 'react';
 import { Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { colors, radius, typography, shadow } from '../../theme';
+import { radius, typography, shadow } from '../../theme';
+import { useThemeColors } from '../../contexts/ThemeContext';
 import { Surface } from './surface';
 
-const toneBg = { critical: colors.chip.red, warning: colors.chip.orange, safe: colors.chip.green, info: colors.chip.blue };
-
 export function StatCard({ title, value, subtitle, tone = 'info', onPress, testId }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   return (
     <TouchableOpacity activeOpacity={0.7} onPress={onPress} data-testid={testId} style={styles.wrapper}>
       <Surface style={styles.card}>
@@ -16,10 +19,12 @@ export function StatCard({ title, value, subtitle, tone = 'info', onPress, testI
   );
 }
 
-const styles = StyleSheet.create({
-  wrapper: { width: '47%' },
-  card: { padding: 14, gap: 6 },
-  title: { fontFamily: typography.body, fontSize: 12, color: colors.text.secondary },
-  value: { fontFamily: typography.heading, fontSize: 24, fontWeight: '800' },
-  subtitle: { fontFamily: typography.body, fontSize: 11, color: colors.text.tertiary },
-});
+function createStyles(colors) {
+  return StyleSheet.create({
+    wrapper: { width: '47%' },
+    card: { padding: 14, gap: 6 },
+    title: { fontFamily: typography.body, fontSize: 12, color: colors.text.secondary },
+    value: { fontFamily: typography.heading, fontSize: 24, fontWeight: '800' },
+    subtitle: { fontFamily: typography.body, fontSize: 11, color: colors.text.tertiary },
+  });
+}

@@ -15,6 +15,7 @@
 - Tables + seed data in `backend/supabase/master.sql` — run once in Supabase SQL Editor.
 - Auth columns in `backend/supabase/migrations/001_add_auth_columns.sql`.
 - 14 tables with indexes, RLS, and multi-tenant `hospital_id` separation.
+- 13 incremental migrations covering culture tables, master reference tables (3 iterations), audit fields, cascade deletes, frequency alerts, and timeline enrichment.
 
 ### 2. Authentication (JWT, not Supabase Auth)
 - Backend: Express REST API with `jsonwebtoken`. `POST /api/auth/login`, `POST /api/auth/signup`, `GET /api/auth/me`.
@@ -60,6 +61,26 @@
 | 13 | Save button on New Resource shows no feedback | No loading state on the button | Added `saving` state: button shows `ActivityIndicator`, disabled, text changes to "Saving..." |
 | 14 | Search screen shows nothing when query yields no results | No empty state | Added "No results found" with `SearchX` icon and helpful text. |
 | 15 | Data re-fetches on every auth state change | `DataContext` depended on `useAuth()` via `createApiClient(..., token)` | Decoupled: API client created once at module level (no token needed, backend uses `service_role` key for data). |
+
+### Phase II Additions (June 29, 2026)
+
+**Full CRUD** — all entities now support create, read, update, delete with timeline events. Antibiotics, investigations, cultures, and devices have inline edit. Confirm dialogs before destructive actions.
+
+**Master Reference System** — read-only endpoints for antibiotics, cultures, devices, investigations, and drug routes. Frontend picker modals searchable with category filtering, used in creation forms.
+
+**Cultures Module** — full culture lab workflow: record culture type/source/status, add organisms with colony counts, add susceptibility results (S/I/R). Link cultures to antibiotics.
+
+**Activity Feed** — global activity tab showing all non-routine timeline events with icons, colors, relative timestamps, and tappable patient links.
+
+**Checklist** — optimistic UI toggles with local state preventing stale-data bugs on rapid clicks. Secondary timeline failure doesn't revert primary PATCH.
+
+**Migrations (11 new)** — cascade deletes, audit fields, culture tables, 3 iterations of master reference schema, frequency alerts, ICU beds config, timeline enrichment columns.
+
+**13 new backend modules** — antibiotic-culture-links, antibiotic-culture-mapping, antibiotic-master, culture-master, cultures (with organisms/sensitivities), device-master, investigation-master, route-master.
+
+**15+ new frontend components** — picker modals, dropdowns, culture link/reference modals, back button, date field, patient/user selectors, confirm dialogs.
+
+**Theme system (dark mode)** — ThemeContext providing dynamic colors. 32 files converted to use useThemeColors() + useMemo for dynamic StyleSheet.
 
 ---
 

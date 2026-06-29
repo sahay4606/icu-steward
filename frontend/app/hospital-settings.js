@@ -1,19 +1,21 @@
+import { useMemo } from 'react';
 import { router } from 'expo-router';
-import { ArrowLeft, Bell, Building2, FileText, ShieldCheck } from 'lucide-react-native';
+import { Bell, Building2, FileText, ShieldCheck } from 'lucide-react-native';
 import { ScrollView, Text, View, TouchableOpacity, StyleSheet } from 'react-native';
 
 import { SectionHeader, Surface, InfoRow, Pill } from '../src/components/ui';
-import { colors, typography } from '../src/theme';
+import { typography } from '../src/theme';
+import { useThemeColors } from '../src/contexts/ThemeContext';
 import { useData } from '../src/contexts/DataContext';
+import { BackButton } from '../src/components/back-button';
 
 export default function HospitalSettingsScreen() {
   const { hospital, reminderRules } = useData();
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <TouchableOpacity activeOpacity={0.7} onPress={() => router.back()} data-testid="hospital-settings-back" style={styles.back}>
-        <ArrowLeft color={colors.text.primary} size={18} strokeWidth={2} />
-        <Text style={styles.backText}>Hospital settings</Text>
-      </TouchableOpacity>
+      <BackButton colors={colors} fallback="/" label="Hospital settings" testID="hospital-settings-back" />
 
       <SectionHeader title="Hospital settings" subtitle="Tenant-level configuration and reminder rules." />
 
@@ -76,7 +78,7 @@ export default function HospitalSettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) { return StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
@@ -138,4 +140,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-});
+}); }

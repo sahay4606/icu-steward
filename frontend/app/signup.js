@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { router } from 'expo-router';
 import {
   ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput,
   TouchableOpacity, View, StyleSheet, Alert,
 } from 'react-native';
 
-import { colors, radius, typography } from '../src/theme';
+import { radius, typography } from '../src/theme';
+import { useThemeColors } from '../src/contexts/ThemeContext';
 import { useAuth } from '../src/contexts/AuthContext';
 
 export default function SignupScreen() {
@@ -16,6 +17,8 @@ export default function SignupScreen() {
   const [confirm, setConfirm] = useState('');
   const [hospitalId, setHospitalId] = useState('hosp-st-john');
   const [busy, setBusy] = useState(false);
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   async function handleSignup() {
     if (!name.trim() || !email.trim() || !password) {
@@ -159,7 +162,7 @@ export default function SignupScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) { return StyleSheet.create({
   wrapper: { flex: 1, backgroundColor: colors.background },
   content: { flexGrow: 1, justifyContent: 'center', padding: 24 },
   header: { alignItems: 'center', marginBottom: 24 },
@@ -197,4 +200,4 @@ const styles = StyleSheet.create({
   switchRow: { alignItems: 'center', marginTop: 24 },
   switchText: { fontFamily: typography.body, fontSize: 13, color: colors.text.secondary },
   switchLink: { color: colors.brand.primary, fontWeight: '700' },
-});
+}); }

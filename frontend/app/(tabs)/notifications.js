@@ -3,21 +3,24 @@ import { ScrollView, Text, View, TouchableOpacity, StyleSheet } from 'react-nati
 import { Bell, CheckCheck, Inbox, ShieldAlert } from 'lucide-react-native';
 
 import { SectionHeader, Surface, Pill, ToggleChip, SearchField } from '../../src/components/ui';
-import { colors, typography } from '../../src/theme';
+import { typography } from '../../src/theme';
+import { useThemeColors } from '../../src/contexts/ThemeContext';
 import { useData } from '../../src/contexts/DataContext';
 import { formatDateTime } from '../../src/lib/format';
-
-function SeverityIcon({ severity }) {
-  if (severity === 'critical') return <ShieldAlert color={colors.status.critical} size={18} strokeWidth={2} />;
-  if (severity === 'warning') return <Bell color={colors.status.warning} size={18} strokeWidth={2} />;
-  return <Inbox color={colors.status.info} size={18} strokeWidth={2} />;
-}
 
 export default function NotificationsScreen() {
   const { notifications, acknowledgeNotification, error } = useData();
   const [query, setQuery] = useState('');
   const [onlyOpen, setOnlyOpen] = useState(true);
   const [acknowledged, setAcknowledged] = useState({});
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
+  function SeverityIcon({ severity }) {
+    if (severity === 'critical') return <ShieldAlert color={colors.status.critical} size={18} strokeWidth={2} />;
+    if (severity === 'warning') return <Bell color={colors.status.warning} size={18} strokeWidth={2} />;
+    return <Inbox color={colors.status.info} size={18} strokeWidth={2} />;
+  }
 
   const visible = useMemo(() => {
     return notifications.filter((item) => {
@@ -120,7 +123,7 @@ export default function NotificationsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors) { return StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
@@ -198,4 +201,4 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.text.secondary,
   },
-});
+}); }
